@@ -3,7 +3,7 @@
 Black-76 Greeks use lognormal vol (sigma).
 Bachelier Greeks use normal vol (sigma_n) in EUR/MWh.
 
-Greeks covered: Delta, Gamma, Vega, Theta, Vanna, Volga (Vomma).
+Greeks covered: Delta, Gamma, Vega, Theta, Rho, Vanna, Volga (Vomma).
 """
 
 import math
@@ -91,6 +91,16 @@ def b76_theta(
     return theta / 365.0
 
 
+def b76_rho(
+    F: float, K: float, T: float, r: float, sigma: float, option_type: str = "call"
+) -> float:
+    """Black-76 rho — dV/dr per 1 percentage-point change (÷100 convention)."""
+    if T <= 0:
+        return 0.0
+    from pricing.black76 import price as b76_price
+    return -T * b76_price(F, K, T, r, sigma, option_type) / 100.0
+
+
 def b76_greeks(
     F: float, K: float, T: float, r: float, sigma: float, option_type: str = "call"
 ) -> dict[str, float]:
@@ -100,6 +110,7 @@ def b76_greeks(
         "gamma": b76_gamma(F, K, T, r, sigma),
         "vega": b76_vega(F, K, T, r, sigma),
         "theta": b76_theta(F, K, T, r, sigma, option_type),
+        "rho": b76_rho(F, K, T, r, sigma, option_type),
         "vanna": b76_vanna(F, K, T, r, sigma),
         "volga": b76_volga(F, K, T, r, sigma),
     }
@@ -168,6 +179,29 @@ def bach_volga(
     return vega * (d**2 - 1.0) / sigma_n
 
 
+def bach_theta(
+    F: float, K: float, T: float, r: float, sigma_n: float, option_type: str = "call"
+) -> float:
+    """Bachelier theta — dV/dt per calendar day."""
+    if T <= 0:
+        return 0.0
+    d = _bach_d(F, K, T, sigma_n)
+    df = math.exp(-r * T)
+    from pricing.bachelier import price as bach_price
+    decay = -df * sigma_n * norm.pdf(d) / (2.0 * math.sqrt(T))
+    return (decay - r * bach_price(F, K, T, r, sigma_n, option_type)) / 365.0
+
+
+def bach_rho(
+    F: float, K: float, T: float, r: float, sigma_n: float, option_type: str = "call"
+) -> float:
+    """Bachelier rho — dV/dr per 1 percentage-point change (÷100 convention)."""
+    if T <= 0:
+        return 0.0
+    from pricing.bachelier import price as bach_price
+    return -T * bach_price(F, K, T, r, sigma_n, option_type) / 100.0
+
+
 def bach_greeks(
     F: float, K: float, T: float, r: float, sigma_n: float, option_type: str = "call"
 ) -> dict[str, float]:
@@ -176,6 +210,8 @@ def bach_greeks(
         "delta": bach_delta(F, K, T, r, sigma_n, option_type),
         "gamma": bach_gamma(F, K, T, r, sigma_n),
         "vega": bach_vega(F, K, T, r, sigma_n),
+        "theta": bach_theta(F, K, T, r, sigma_n, option_type),
+        "rho": bach_rho(F, K, T, r, sigma_n, option_type),
         "vanna": bach_vanna(F, K, T, r, sigma_n),
         "volga": bach_volga(F, K, T, r, sigma_n),
     }
