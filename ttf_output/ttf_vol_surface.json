@@ -1,0 +1,509 @@
+{
+  "reference_date": "2026-04-20",
+  "surface": [
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 31.6212,
+      "vol": 0.7072,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 35.1347,
+      "vol": 0.7072,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 36.8914,
+      "vol": 0.7072,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 38.554,
+      "vol": 0.689821,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 38.6481,
+      "vol": 0.68886,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 39.5265,
+      "vol": 0.65,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 40.5831,
+      "vol": 0.65,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 41.5028,
+      "vol": 0.654561,
+      "model": "black76"
+    },
+    {
+      "T": 0.0833333333,
+      "contract": "May26",
+      "F": 35.1347,
+      "strike": 46.1127,
+      "vol": 0.676,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 31.674,
+      "vol": 0.6344,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 35.1933,
+      "vol": 0.6344,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 36.953,
+      "vol": 0.6344,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 38.7127,
+      "vol": 0.617948,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 39.5925,
+      "vol": 0.58,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 40.3384,
+      "vol": 0.58,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 41.5721,
+      "vol": 0.58,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 42.4615,
+      "vol": 0.58,
+      "model": "black76"
+    },
+    {
+      "T": 0.1666666667,
+      "contract": "Jun26",
+      "F": 35.1933,
+      "strike": 49.9183,
+      "vol": 0.6032,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 31.6503,
+      "vol": 0.572,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 35.167,
+      "vol": 0.572,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 36.9254,
+      "vol": 0.572,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 38.6837,
+      "vol": 0.557166,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 39.5629,
+      "vol": 0.52,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 41.1813,
+      "vol": 0.52,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 41.5411,
+      "vol": 0.52,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 43.3487,
+      "vol": 0.52,
+      "model": "black76"
+    },
+    {
+      "T": 0.25,
+      "contract": "Jul26",
+      "F": 35.167,
+      "strike": 51.7921,
+      "vol": 0.5408,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 31.5436,
+      "vol": 0.5096,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 35.0484,
+      "vol": 0.5096,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 36.8008,
+      "vol": 0.5096,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 38.5533,
+      "vol": 0.496384,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 39.4295,
+      "vol": 0.46,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 41.401,
+      "vol": 0.46,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 43.7166,
+      "vol": 0.46,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 46.0175,
+      "vol": 0.46,
+      "model": "black76"
+    },
+    {
+      "T": 0.5,
+      "contract": "Oct26",
+      "F": 35.0484,
+      "strike": 57.5552,
+      "vol": 0.4784,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 32.4616,
+      "vol": 0.468,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 36.0684,
+      "vol": 0.468,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 37.8718,
+      "vol": 0.468,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 39.6752,
+      "vol": 0.455863,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 40.5769,
+      "vol": 0.42,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 42.6058,
+      "vol": 0.42,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 46.787,
+      "vol": 0.42,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 49.2495,
+      "vol": 0.42,
+      "model": "black76"
+    },
+    {
+      "T": 0.75,
+      "contract": "Jan27",
+      "F": 36.0684,
+      "strike": 63.2942,
+      "vol": 0.4368,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 33.3381,
+      "vol": 0.4472,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 37.0423,
+      "vol": 0.4472,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 38.8944,
+      "vol": 0.4472,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 40.7465,
+      "vol": 0.435603,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 41.6726,
+      "vol": 0.4,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 43.7562,
+      "vol": 0.4,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 49.927,
+      "vol": 0.4,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 52.5548,
+      "vol": 0.4,
+      "model": "black76"
+    },
+    {
+      "T": 1.0,
+      "contract": "Apr27",
+      "F": 37.0423,
+      "strike": 69.3047,
+      "vol": 0.416,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 33.3381,
+      "vol": 0.4264,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 37.0423,
+      "vol": 0.4264,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 38.8944,
+      "vol": 0.4264,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 40.7465,
+      "vol": 0.415342,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 41.6726,
+      "vol": 0.38,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 43.7562,
+      "vol": 0.38,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 58.4189,
+      "vol": 0.38,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 61.4935,
+      "vol": 0.38,
+      "model": "black76"
+    },
+    {
+      "T": 2.0,
+      "contract": "Apr28",
+      "F": 37.0423,
+      "strike": 89.5148,
+      "vol": 0.3952,
+      "model": "black76"
+    }
+  ]
+}
