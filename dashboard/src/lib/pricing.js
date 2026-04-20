@@ -116,7 +116,10 @@ function brent(f, lo, hi, tol = 1e-8, maxIter = 200) {
     } else {
       s = b - fb * (b - a) / (fb - fa);
     }
-    const cond1 = s < (3 * a + b) / 4 || s > b;
+    // cond1: s is not in the interval [min((3a+b)/4,b), max((3a+b)/4,b)]
+    const lo3 = Math.min((3 * a + b) / 4, b);
+    const hi3 = Math.max((3 * a + b) / 4, b);
+    const cond1 = s < lo3 || s > hi3;
     const cond2 = mflag && Math.abs(s - b) >= Math.abs(b - c) / 2;
     const cond3 = !mflag && Math.abs(s - b) >= Math.abs(c - d) / 2;
     if (cond1 || cond2 || cond3) { s = (a + b) / 2; mflag = true; }
@@ -150,7 +153,7 @@ export function buildVolSurface(F0, r, atm_vol = 0.50) {
   const strikes = deltaMoneyness.map(dm => parseFloat((F0 * Math.exp(dm)).toFixed(4)));
   const vols = tenors.map((T, ti) => {
     const atmVol = atm_vol * (1 - 0.05 * ti); // term structure: vol declines with tenor
-    return strikes.map((K, ki) => {
+    return strikes.map((K) => {
       const logStrike = Math.log(K / F0);
       // Skew: negative (downside more expensive), convexity
       const skew = -0.05 * logStrike;
