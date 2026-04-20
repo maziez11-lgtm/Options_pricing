@@ -17,11 +17,9 @@ TTF conventions:
 
 from __future__ import annotations
 
-import csv
 import json
 import logging
 import math
-import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from typing import Optional
@@ -187,8 +185,8 @@ class TTFForwardCurve:
     def load(self, contracts: Optional[list[TTFContract]] = None) -> "TTFForwardCurve":
         """Fetch prices for *contracts* (default: next 12 monthly contracts)."""
         contracts = contracts or self.calendar.active_contracts(n=12)
-        spot = self._fetch_spot()
-        self._points = [self._price_contract(c, spot) for c in contracts]
+        spot, source = self._fetch_spot()
+        self._points = [self._price_contract(c, spot, source) for c in contracts]
         return self
 
     def forward_price(self, T: float) -> float:
@@ -212,8 +210,11 @@ class TTFForwardCurve:
     # Internal
     # ------------------------------------------------------------------
 
-    def _fetch_spot(self) -> float:
-        """Fetch latest TTF front-month price from Yahoo Finance."""
+    def _fetch_spot(self) -> tuple[float, str]:
+        """Fetch latest TTF front-month price from Yahoo Finance.
+
+        Returns (price, source) where source is 'yahoo_finance' or 'synthetic'.
+        """
         try:
             url = _YF_BASE_URL.format(ticker=_YF_TTF_TICKER)
             resp = requests.get(
@@ -223,19 +224,18 @@ class TTFForwardCurve:
             data = resp.json()
             price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
             logger.info("Yahoo Finance TTF spot: %.4f EUR/MWh", price)
-            return float(price)
+            return float(price), "yahoo_finance"
         except Exception as exc:
             logger.warning("Yahoo Finance fetch failed (%s). Using synthetic curve.", exc)
-            return self._synthetic_spot()
+            return self._synthetic_spot(), "synthetic"
 
     @staticmethod
     def _synthetic_spot() -> float:
         """Representative TTF spot price when live feed is unavailable."""
         return 35.0  # EUR/MWh (typical mid-range)
 
-    def _price_contract(self, c: TTFContract, spot: float) -> ForwardPoint:
+    def _price_contract(self, c: TTFContract, spot: float, source: str) -> ForwardPoint:
         """Price a single contract using cost-of-carry (gas storage proxy)."""
-        # Simple cost-of-carry with a seasonal shape
         carry = self.risk_free_rate
         seasonal = 0.03 * math.sin(2 * math.pi * (c.delivery_month - 1) / 12)  # winter premium
         fwd = spot * math.exp((carry + seasonal) * c.T)
@@ -246,7 +246,7 @@ class TTFForwardCurve:
             expiry_date=c.expiry_date,
             T=c.T,
             forward_price=round(fwd, 4),
-            source="yahoo_finance" if spot != 35.0 else "synthetic",
+            source=source,
         )
 
 
@@ -291,6 +291,8 @@ class VolatilitySurface:
     def _get_interp(self) -> RectBivariateSpline:
         if self._interp is not None:
             return self._interp
+        if not self.smiles:
+            raise RuntimeError("VolatilitySurface has no smiles — call add_smile() first.")
         df = self.to_dataframe()
         Ts = sorted(df["T"].unique())
         Ks = sorted(df["strike"].unique())
@@ -329,7 +331,7 @@ class VolatilitySurfaceBuilder:
         1.0:    0.40,
         2.0:    0.38,
     }
-    # Risk-reversal (25D): positive → call vol > put vol (upward skew)
+    # Risk-reversal (25D): negative → put vol > call vol (TTF downside skew typical)
     _RR25 = {T: -0.03 for T in _ATM_VOLS}
     # Butterfly (25D): smile convexity
     _BF25 = {T: 0.015 for T in _ATM_VOLS}
@@ -447,8 +449,19 @@ class MarketCalibration:
         self.results: dict[float, SABRParams] = {}
 
     def calibrate_all(self) -> "MarketCalibration":
-        """Calibrate SABR for every smile in the surface."""
+        """Calibrate SABR for every Black-76 smile in the surface.
+
+        Bachelier smiles (model='bachelier', i.e. F < 2 EUR/MWh) use the
+        normal-vol SABR which is not implemented here — they are skipped.
+        """
         for smile in self.surface.smiles:
+            if smile.model == "bachelier":
+                logger.warning(
+                    "Skipping SABR calibration for T=%.4f: "
+                    "Bachelier smile (F=%.4f) requires normal-vol SABR.",
+                    smile.T, smile.F,
+                )
+                continue
             try:
                 params = self._calibrate_sabr(smile)
                 self.results[smile.T] = params
@@ -498,20 +511,15 @@ class MarketCalibration:
     ) -> float:
         """Hagan et al. (2002) SABR implied vol approximation."""
         if abs(F - K) < 1e-8:
-            # ATM formula
+            # ATM: chi(z)/z → 1 as F→K, so the correction term drops out entirely.
+            # Correct formula: sigma_ATM = alpha / F^(1-beta) * (1 + term2*T)
             FK_mid = F ** (1 - beta)
-            z_atm = nu / alpha * FK_mid * math.sqrt(T) if alpha > 0 else 0
-            if abs(z_atm) < 1e-8:
-                denom = FK_mid
-            else:
-                chi = math.log((math.sqrt(1 - 2 * rho * z_atm + z_atm**2) + z_atm - rho) / (1 - rho))
-                denom = FK_mid * (chi / z_atm if abs(z_atm) > 1e-8 else 1.0)
             term2 = (
                 (1 - beta) ** 2 / 24 * alpha**2 / FK_mid**2
                 + rho * beta * nu * alpha / (4 * FK_mid)
                 + (2 - 3 * rho**2) / 24 * nu**2
             )
-            return alpha / denom * (1 + term2 * T)
+            return alpha / FK_mid * (1 + term2 * T)
 
         log_FK = math.log(F / K)
         FK_mid = (F * K) ** ((1 - beta) / 2)
