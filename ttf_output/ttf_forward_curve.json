@@ -1,0 +1,113 @@
+{
+  "reference_date": "2026-04-20",
+  "curve": [
+    {
+      "contract_code": "TTFK26",
+      "delivery_month": 5,
+      "delivery_year": 2026,
+      "expiry_date": "2026-04-30",
+      "T": 0.0273972603,
+      "forward_price": 35.0537,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFM26",
+      "delivery_month": 6,
+      "delivery_year": 2026,
+      "expiry_date": "2026-05-29",
+      "T": 0.1068493151,
+      "forward_price": 35.1687,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFN26",
+      "delivery_month": 7,
+      "delivery_year": 2026,
+      "expiry_date": "2026-06-30",
+      "T": 0.1945205479,
+      "forward_price": 35.2048,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFQ26",
+      "delivery_month": 8,
+      "delivery_year": 2026,
+      "expiry_date": "2026-07-31",
+      "T": 0.2794520548,
+      "forward_price": 35.147,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFU26",
+      "delivery_month": 9,
+      "delivery_year": 2026,
+      "expiry_date": "2026-08-31",
+      "T": 0.3643835616,
+      "forward_price": 35.0513,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFV26",
+      "delivery_month": 10,
+      "delivery_year": 2026,
+      "expiry_date": "2026-09-30",
+      "T": 0.4465753425,
+      "forward_price": 35.0,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFX26",
+      "delivery_month": 11,
+      "delivery_year": 2026,
+      "expiry_date": "2026-10-30",
+      "T": 0.5287671233,
+      "forward_price": 35.0745,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFZ26",
+      "delivery_month": 12,
+      "delivery_year": 2026,
+      "expiry_date": "2026-11-30",
+      "T": 0.6136986301,
+      "forward_price": 35.3237,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFF27",
+      "delivery_month": 1,
+      "delivery_year": 2027,
+      "expiry_date": "2026-12-31",
+      "T": 0.698630137,
+      "forward_price": 35.7413,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFG27",
+      "delivery_month": 2,
+      "delivery_year": 2027,
+      "expiry_date": "2027-01-29",
+      "T": 0.7780821918,
+      "forward_price": 36.2472,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFH27",
+      "delivery_month": 3,
+      "delivery_year": 2027,
+      "expiry_date": "2027-02-26",
+      "T": 0.8547945205,
+      "forward_price": 36.7155,
+      "source": "synthetic"
+    },
+    {
+      "contract_code": "TTFJ27",
+      "delivery_month": 4,
+      "delivery_year": 2027,
+      "expiry_date": "2027-03-31",
+      "T": 0.9452054795,
+      "forward_price": 37.0423,
+      "source": "synthetic"
+    }
+  ]
+}
