@@ -61,7 +61,7 @@ def t_from_delivery(
     """ACT/365 time to TTF options expiry for a given delivery month."""
     ref = reference or date.today()
     exp = options_expiry_from_delivery(delivery_year, delivery_month)
-    return max((exp - ref).days / 365.0, 0.0)
+    return max((exp - ref).days + 1, 0) / 365.0
 
 
 def t_futures_from_delivery(
@@ -72,7 +72,7 @@ def t_futures_from_delivery(
     """ACT/365 time to TTF futures expiry for a given delivery month."""
     ref = reference or date.today()
     exp = futures_expiry_from_delivery(delivery_year, delivery_month)
-    return max((exp - ref).days / 365.0, 0.0)
+    return max((exp - ref).days + 1, 0) / 365.0
 
 
 # ---------------------------------------------------------------------------
