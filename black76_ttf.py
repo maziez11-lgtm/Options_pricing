@@ -14,7 +14,13 @@ T helpers (re-exported for convenience):
 from __future__ import annotations
 
 import math
+import sys
+import os
 from dataclasses import dataclass
+
+# Ensure the directory containing this file is on sys.path so that ttf_time
+# can be found regardless of the working directory the caller uses.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from scipy.optimize import brentq
 from scipy.stats import norm

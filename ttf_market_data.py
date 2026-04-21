@@ -20,9 +20,13 @@ from __future__ import annotations
 import json
 import logging
 import math
+import sys
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from typing import Optional
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import numpy as np
 import pandas as pd
