@@ -6,38 +6,73 @@ Conventions:
   - Rate       : risk-free EUR rate, annualised decimal (e.g. 3% → r = 0.03)
   - Vol        : lognormal decimal for Black-76 (e.g. 50% → sigma = 0.50)
                  normal EUR/MWh for Bachelier    (e.g. 8 EUR/MWh → sigma_n = 8.0)
-
-T helpers (re-exported for convenience):
-  from black76_ttf import time_to_maturity, maturity_breakdown, t_from_delivery
 """
 
 from __future__ import annotations
 
 import math
-import sys
-import os
 from dataclasses import dataclass
-
-# Ensure the directory containing this file is on sys.path so that ttf_time
-# can be found regardless of the working directory the caller uses.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from datetime import date, timedelta
 
 from scipy.optimize import brentq
 from scipy.stats import norm
 
-from ttf_time import (   # noqa: F401  — re-export for one-stop import
-    time_to_maturity,
-    time_to_maturity_multi,
-    maturity_breakdown,
-    expiry_from_delivery,
-    options_expiry_from_delivery,
-    futures_expiry_from_delivery,
-    t_from_delivery,
-    t_futures_from_delivery,
-    subtract_business_days,
-    parse_date,
-    DayCount,
-)
+
+# ---------------------------------------------------------------------------
+# Expiry calendar (self-contained, no external dependencies)
+# ---------------------------------------------------------------------------
+
+def _is_business_day(d: date) -> bool:
+    return d.weekday() < 5
+
+
+def _prev_business_day(d: date) -> date:
+    while not _is_business_day(d):
+        d -= timedelta(days=1)
+    return d
+
+
+def _subtract_business_days(d: date, n: int) -> date:
+    while n > 0:
+        d -= timedelta(days=1)
+        if _is_business_day(d):
+            n -= 1
+    return d
+
+
+def futures_expiry_from_delivery(delivery_year: int, delivery_month: int) -> date:
+    """Last business day of the month before the delivery month (futures LTD)."""
+    last_of_prev = date(delivery_year, delivery_month, 1) - timedelta(days=1)
+    return _prev_business_day(last_of_prev)
+
+
+def options_expiry_from_delivery(delivery_year: int, delivery_month: int) -> date:
+    """5 business days before the futures LTD (ICE/EEX TTF options convention)."""
+    return _subtract_business_days(
+        futures_expiry_from_delivery(delivery_year, delivery_month), 5
+    )
+
+
+def t_from_delivery(
+    delivery_year: int,
+    delivery_month: int,
+    reference: date | None = None,
+) -> float:
+    """ACT/365 time to TTF options expiry for a given delivery month."""
+    ref = reference or date.today()
+    exp = options_expiry_from_delivery(delivery_year, delivery_month)
+    return max((exp - ref).days / 365.0, 0.0)
+
+
+def t_futures_from_delivery(
+    delivery_year: int,
+    delivery_month: int,
+    reference: date | None = None,
+) -> float:
+    """ACT/365 time to TTF futures expiry for a given delivery month."""
+    ref = reference or date.today()
+    exp = futures_expiry_from_delivery(delivery_year, delivery_month)
+    return max((exp - ref).days / 365.0, 0.0)
 
 
 # ---------------------------------------------------------------------------

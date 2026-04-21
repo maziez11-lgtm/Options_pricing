@@ -20,13 +20,9 @@ from __future__ import annotations
 import json
 import logging
 import math
-import sys
-import os
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from typing import Optional
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import numpy as np
 import pandas as pd
@@ -87,24 +83,48 @@ class TTFExpiryCalendar:
     # Public API
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Internal business-day helpers (self-contained, no external deps)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_bd(d: date) -> bool:
+        return d.weekday() < 5
+
+    @staticmethod
+    def _prev_bd(d: date) -> date:
+        while d.weekday() >= 5:
+            d -= timedelta(days=1)
+        return d
+
+    @staticmethod
+    def _subtract_bd(d: date, n: int) -> date:
+        while n > 0:
+            d -= timedelta(days=1)
+            if d.weekday() < 5:
+                n -= 1
+        return d
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def futures_expiry_date(self, delivery_year: int, delivery_month: int) -> date:
         """TTF futures last trading day: last business day of month before delivery."""
-        from ttf_time import futures_expiry_from_delivery
-        return futures_expiry_from_delivery(delivery_year, delivery_month)
+        last_of_prev = date(delivery_year, delivery_month, 1) - timedelta(days=1)
+        return self._prev_bd(last_of_prev)
 
     def expiry_date(self, delivery_year: int, delivery_month: int) -> date:
         """TTF options expiry: 5 business days before the futures expiry."""
-        from ttf_time import options_expiry_from_delivery
-        return options_expiry_from_delivery(delivery_year, delivery_month)
+        return self._subtract_bd(self.futures_expiry_date(delivery_year, delivery_month), 5)
 
     def contract_code(self, delivery_year: int, delivery_month: int) -> str:
         """Return ICE-style code, e.g. 'TTFH26' for March 2026."""
         return f"TTF{_MONTH_CODES[delivery_month]}{str(delivery_year)[-2:]}"
 
     def time_to_expiry(self, expiry: date) -> float:
-        """Act/365 Fixed from reference_date to expiry — delegates to ttf_time."""
-        from ttf_time import DayCount
-        return DayCount.act365(self.reference_date, expiry)
+        """Act/365 Fixed from reference_date to expiry."""
+        return max((expiry - self.reference_date).days / 365.0, 0.0)
 
     def active_contracts(self, n: int = 12) -> list[TTFContract]:
         """Return the next *n* monthly TTF contracts."""
