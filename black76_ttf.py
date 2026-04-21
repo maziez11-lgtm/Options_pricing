@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date, timedelta
+import re
 
 from scipy.optimize import brentq
 from scipy.stats import norm
@@ -76,6 +77,52 @@ def t_futures_from_delivery(
 
 
 # ---------------------------------------------------------------------------
+# Contract-name parser
+# ---------------------------------------------------------------------------
+
+_MONTH_FROM_CODE = {
+    "F": 1, "G": 2, "H": 3, "J": 4, "K": 5, "M": 6,
+    "N": 7, "Q": 8, "U": 9, "V": 10, "X": 11, "Z": 12,
+}
+_MONTH_FROM_ABBR = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+_ICE_RE   = re.compile(r"^TTF([FGHJKMNQUVXZ])(\d{2})$", re.IGNORECASE)
+_ABBR_RE  = re.compile(r"^([A-Za-z]{3})-?(\d{2,4})$")
+
+
+def t_from_contract(contract: str, reference: date | None = None) -> float:
+    """Return ACT/365 T (today included) for a TTF contract name.
+
+    Accepted formats
+    ----------------
+    "TTFH26"   ICE/EEX code  (delivery month = March 2026)
+    "Mar26"    3-letter month abbreviation + 2-digit year
+    "Mar2026"  3-letter month abbreviation + 4-digit year
+    """
+    m = _ICE_RE.match(contract.strip())
+    if m:
+        month = _MONTH_FROM_CODE[m.group(1).upper()]
+        year  = 2000 + int(m.group(2))
+        return t_from_delivery(year, month, reference)
+
+    m = _ABBR_RE.match(contract.strip())
+    if m:
+        abbr = m.group(1).lower()
+        yr   = int(m.group(2))
+        year = yr if yr > 100 else 2000 + yr
+        month = _MONTH_FROM_ABBR.get(abbr)
+        if month:
+            return t_from_delivery(year, month, reference)
+
+    raise ValueError(
+        f"Cannot parse contract '{contract}'. "
+        "Use ICE code ('TTFH26') or month abbreviation ('Mar26')."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -130,6 +177,51 @@ def b76_price(
     if ot == "put":
         return b76_put(F, K, T, r, sigma)
     raise ValueError(f"option_type must be 'call' or 'put', got '{option_type}'")
+
+
+def b76_price_ttf(
+    F: float,
+    K: float,
+    contract: str,
+    r: float,
+    sigma: float,
+    option_type: str = "call",
+    reference: date | None = None,
+) -> float:
+    """Black-76 price where T is derived from a TTF contract name.
+
+    Parameters
+    ----------
+    contract : ICE code or month abbreviation, e.g. "TTFH26" or "Mar26"
+    reference : valuation date (default: today)
+
+    Example
+    -------
+    >>> b76_price_ttf(35.0, 35.0, "TTFM26", r=0.03, sigma=0.50)
+    >>> b76_price_ttf(35.0, 32.0, "Jun26",  r=0.03, sigma=0.45, option_type="put")
+    """
+    T = t_from_contract(contract, reference)
+    return b76_price(F, K, T, r, sigma, option_type)
+
+
+def bach_price_ttf(
+    F: float,
+    K: float,
+    contract: str,
+    r: float,
+    sigma_n: float,
+    option_type: str = "call",
+    reference: date | None = None,
+) -> float:
+    """Bachelier price where T is derived from a TTF contract name.
+
+    Parameters
+    ----------
+    contract : ICE code or month abbreviation, e.g. "TTFH26" or "Mar26"
+    reference : valuation date (default: today)
+    """
+    T = t_from_contract(contract, reference)
+    return bach_price(F, K, T, r, sigma_n, option_type)
 
 
 # ---------------------------------------------------------------------------
