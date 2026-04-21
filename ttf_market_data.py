@@ -63,16 +63,17 @@ _STANDARD_TENORS = [1 / 12, 2 / 12, 3 / 12, 6 / 12, 9 / 12, 1.0, 2.0]
 class TTFContract:
     delivery_month: int
     delivery_year: int
-    expiry_date: date
+    expiry_date: date         # options expiry (5 bd before futures expiry)
+    futures_expiry_date: date # futures last trading day
     contract_code: str
-    T: float  # time to expiry in years from today
+    T: float                  # time to options expiry in years (Act/365)
 
 
 class TTFExpiryCalendar:
-    """TTF futures expiry dates following ICE/EEX conventions.
+    """TTF option and futures expiry dates following ICE/EEX conventions.
 
-    Rule: options expire on the last business day of the month
-    *preceding* the delivery month.
+    Futures expiry : last business day of the month preceding delivery.
+    Options expiry : 5 business days before the futures expiry.
     """
 
     def __init__(self, reference_date: Optional[date] = None) -> None:
@@ -82,12 +83,15 @@ class TTFExpiryCalendar:
     # Public API
     # ------------------------------------------------------------------
 
+    def futures_expiry_date(self, delivery_year: int, delivery_month: int) -> date:
+        """TTF futures last trading day: last business day of month before delivery."""
+        from ttf_time import futures_expiry_from_delivery
+        return futures_expiry_from_delivery(delivery_year, delivery_month)
+
     def expiry_date(self, delivery_year: int, delivery_month: int) -> date:
-        """Last business day of the month before delivery."""
-        # First day of delivery month → go back one day to enter previous month
-        first_of_delivery = date(delivery_year, delivery_month, 1)
-        last_of_prev = first_of_delivery - timedelta(days=1)
-        return self._last_business_day(last_of_prev.year, last_of_prev.month)
+        """TTF options expiry: 5 business days before the futures expiry."""
+        from ttf_time import options_expiry_from_delivery
+        return options_expiry_from_delivery(delivery_year, delivery_month)
 
     def contract_code(self, delivery_year: int, delivery_month: int) -> str:
         """Return ICE-style code, e.g. 'TTFH26' for March 2026."""
@@ -116,6 +120,7 @@ class TTFExpiryCalendar:
                         delivery_month=month,
                         delivery_year=year,
                         expiry_date=expiry,
+                        futures_expiry_date=self.futures_expiry_date(year, month),
                         contract_code=self.contract_code(year, month),
                         T=self.time_to_expiry(expiry),
                     )

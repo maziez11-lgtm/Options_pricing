@@ -93,6 +93,17 @@ def business_days_between(start: date, end: date) -> int:
     return count
 
 
+def subtract_business_days(d: date, n: int) -> date:
+    """Return the date that is *n* TARGET2 business days before *d*."""
+    current = d
+    remaining = n
+    while remaining > 0:
+        current -= timedelta(days=1)
+        if is_business_day(current):
+            remaining -= 1
+    return current
+
+
 # ---------------------------------------------------------------------------
 # Day-count fractions
 # ---------------------------------------------------------------------------
@@ -191,17 +202,14 @@ def parse_date(value: DateLike, reference: date | None = None) -> date:
             except ValueError:
                 return date(ref.year + n, ref.month, 28)
 
-    # ICE TTF contract code: TTFH26
+    # ICE TTF contract code: TTFH26 → options expiry (5 bd before futures expiry)
     m = _ICE_CODE.match(s)
     if m:
         month_code = m.group(1).upper()
         yr2 = int(m.group(2))
         year = 2000 + yr2
         month = _MONTH_ABBR[month_code.lower()]
-        # expiry = last business day of month before delivery
-        delivery_first = date(year, month, 1)
-        prev_month_last = delivery_first - timedelta(days=1)
-        return prev_business_day(prev_month_last)
+        return options_expiry_from_delivery(year, month)
 
     # ISO 8601: YYYY-MM-DD
     try:
@@ -298,18 +306,48 @@ def time_to_maturity_multi(
     return [time_to_maturity(e, ref, convention) for e in expiries]
 
 
-def expiry_from_delivery(
+_OPTIONS_EXPIRY_OFFSET_BD = 5   # business days before futures expiry
+
+
+def futures_expiry_from_delivery(
     delivery_year: int,
     delivery_month: int,
 ) -> date:
-    """TTF option expiry: last business day of the month before delivery.
+    """TTF **futures** expiry: last business day of the month before delivery.
 
-    Follows ICE/EEX convention — the option stops trading before the
-    futures delivery period starts.
+    This is the date on which the futures contract itself expires (last
+    trading day for the front-month futures).
     """
     delivery_first = date(delivery_year, delivery_month, 1)
     last_of_prev   = delivery_first - timedelta(days=1)
     return prev_business_day(last_of_prev)
+
+
+def options_expiry_from_delivery(
+    delivery_year: int,
+    delivery_month: int,
+) -> date:
+    """TTF **options** expiry: 5 business days before the futures expiry.
+
+    ICE/EEX convention: TTF options stop trading 5 business days before
+    the underlying futures expires, giving the market time to hedge any
+    exercised positions before the futures last trading day.
+    """
+    fut_expiry = futures_expiry_from_delivery(delivery_year, delivery_month)
+    return subtract_business_days(fut_expiry, _OPTIONS_EXPIRY_OFFSET_BD)
+
+
+def expiry_from_delivery(
+    delivery_year: int,
+    delivery_month: int,
+) -> date:
+    """TTF option expiry (= 5 business days before futures expiry).
+
+    Alias for :func:`options_expiry_from_delivery` — kept as the primary
+    public name because downstream code (pricing, market data) works with
+    option expiries by default.
+    """
+    return options_expiry_from_delivery(delivery_year, delivery_month)
 
 
 def t_from_delivery(
@@ -318,8 +356,19 @@ def t_from_delivery(
     reference: DateLike | None = None,
     convention: str = "act365",
 ) -> float:
-    """T (years) from *reference* to the TTF option expiry for a given delivery month."""
-    exp = expiry_from_delivery(delivery_year, delivery_month)
+    """T (years) from *reference* to the TTF **option** expiry for a given delivery month."""
+    exp = options_expiry_from_delivery(delivery_year, delivery_month)
+    return time_to_maturity(exp, reference, convention)
+
+
+def t_futures_from_delivery(
+    delivery_year: int,
+    delivery_month: int,
+    reference: DateLike | None = None,
+    convention: str = "act365",
+) -> float:
+    """T (years) from *reference* to the TTF **futures** expiry for a given delivery month."""
+    exp = futures_expiry_from_delivery(delivery_year, delivery_month)
     return time_to_maturity(exp, reference, convention)
 
 
@@ -357,9 +406,9 @@ if __name__ == "__main__":
     ref = _d(2026, 4, 21)
 
     examples = [
-        ("2026-09-30",  "ISO date"),
-        ("TTFH26",      "ICE contract code (March 2026)"),
-        ("TTFU26",      "ICE contract code (Sept 2026)"),
+        ("2026-09-30",  "ISO date (raw)"),
+        ("TTFH26",      "ICE code → options expiry"),
+        ("TTFU26",      "ICE code → options expiry"),
         ("3M",          "3-month tenor"),
         ("6M",          "6-month tenor"),
         ("1Y",          "1-year tenor"),
@@ -380,8 +429,12 @@ if __name__ == "__main__":
             print(f"{val:<22} {desc:<34}  ERROR: {e}")
 
     print()
-    print("Delivery-based T:")
+    print(f"{'Contract':<10} {'Opt expiry':<14} {'Fut expiry':<14} {'T_opt':>8} {'T_fut':>8}  Δbd")
+    print("-" * 60)
     for yr, mo, name in [(2026, 6, "Jun-26"), (2026, 9, "Sep-26"), (2027, 3, "Mar-27")]:
-        t = t_from_delivery(yr, mo, ref)
-        exp = expiry_from_delivery(yr, mo)
-        print(f"  {name}  expiry={exp}  T={t:.4f}y")
+        opt_exp = options_expiry_from_delivery(yr, mo)
+        fut_exp = futures_expiry_from_delivery(yr, mo)
+        t_opt   = t_from_delivery(yr, mo, ref)
+        t_fut   = t_futures_from_delivery(yr, mo, ref)
+        bd_diff = business_days_between(opt_exp, fut_exp)
+        print(f"  {name:<8} {str(opt_exp):<14} {str(fut_exp):<14} {t_opt:>8.4f} {t_fut:>8.4f}  {bd_diff} bd")

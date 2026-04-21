@@ -24,7 +24,11 @@ from ttf_time import (   # noqa: F401  — re-export for one-stop import
     time_to_maturity_multi,
     maturity_breakdown,
     expiry_from_delivery,
+    options_expiry_from_delivery,
+    futures_expiry_from_delivery,
     t_from_delivery,
+    t_futures_from_delivery,
+    subtract_business_days,
     parse_date,
     DayCount,
 )
