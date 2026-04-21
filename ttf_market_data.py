@@ -94,9 +94,9 @@ class TTFExpiryCalendar:
         return f"TTF{_MONTH_CODES[delivery_month]}{str(delivery_year)[-2:]}"
 
     def time_to_expiry(self, expiry: date) -> float:
-        """Calendar days from reference_date to expiry, in years (ACT/365)."""
-        delta = (expiry - self.reference_date).days
-        return max(delta / 365.0, 0.0)
+        """Act/365 Fixed from reference_date to expiry — delegates to ttf_time."""
+        from ttf_time import DayCount
+        return DayCount.act365(self.reference_date, expiry)
 
     def active_contracts(self, n: int = 12) -> list[TTFContract]:
         """Return the next *n* monthly TTF contracts."""

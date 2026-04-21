@@ -6,6 +6,9 @@ Conventions:
   - Rate       : risk-free EUR rate, annualised decimal (e.g. 3% → r = 0.03)
   - Vol        : lognormal decimal for Black-76 (e.g. 50% → sigma = 0.50)
                  normal EUR/MWh for Bachelier    (e.g. 8 EUR/MWh → sigma_n = 8.0)
+
+T helpers (re-exported for convenience):
+  from black76_ttf import time_to_maturity, maturity_breakdown, t_from_delivery
 """
 
 from __future__ import annotations
@@ -15,6 +18,16 @@ from dataclasses import dataclass
 
 from scipy.optimize import brentq
 from scipy.stats import norm
+
+from ttf_time import (   # noqa: F401  — re-export for one-stop import
+    time_to_maturity,
+    time_to_maturity_multi,
+    maturity_breakdown,
+    expiry_from_delivery,
+    t_from_delivery,
+    parse_date,
+    DayCount,
+)
 
 
 # ---------------------------------------------------------------------------
