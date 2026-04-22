@@ -1,16 +1,38 @@
-# React + Vite
+# TTF Options Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interactive React + Vite dashboard for visualising TTF natural gas option prices, Greeks, and vol surfaces.
 
-Currently, two official plugins are available:
+## Running Locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+cd dashboard
+npm install
+npm run dev
+# Opens at http://localhost:5173
+```
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Tab | Description |
+|-----|-------------|
+| **Pricer** | Price a single call or put using Black-76 or Bachelier; displays full Greeks (Δ, Γ, ν, Θ, ρ, Vanna, Volga) |
+| **Vol Surface** | Interactive 3D implied vol surface across strikes and maturities |
+| **Greeks Chart** | Delta, Gamma, Vega plotted against strike — B76 and Bachelier side-by-side |
+| **Comparison** | Price comparison table: Black-76 vs Bachelier across the strike range |
 
-## Expanding the ESLint configuration
+Click **Export to Excel** in any tab to download a `.xlsx` file of the current results.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Build for Production
+
+```bash
+npm run build
+# Output in dist/
+```
+
+The `dist/` folder can be served by any static file host (Nginx, Vercel, GitHub Pages, etc.).
+
+## Tech Stack
+
+- [React](https://react.dev/) + [Vite](https://vitejs.dev/) (HMR, fast dev server)
+- Pricing logic mirrors `black76_ttf.py` — Brent's method for implied vol, Black-76 and Bachelier models implemented in JavaScript
+- Excel export via [SheetJS (xlsx)](https://sheetjs.com/)
