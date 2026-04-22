@@ -77,6 +77,256 @@ def t_futures_from_delivery(
 
 
 # ---------------------------------------------------------------------------
+# ICE Endex official expiry calendar — Netherlands + UK holiday calendar
+# ---------------------------------------------------------------------------
+# Official ICE Endex Dutch TTF Natural Gas Options rule:
+#   1. Candidate  = 5th calendar day before the 1st of the delivery month.
+#   2. Adjust     = nearest prior business day (NL + UK calendar).
+#   3. Conflict   = if result == futures LTD, move one further BD earlier.
+# ---------------------------------------------------------------------------
+
+def _easter(year: int) -> date:
+    """Easter Sunday for a given year (Anonymous Gregorian algorithm)."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    L = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * L) // 451
+    month = (h + L - 7 * m + 114) // 31
+    day = ((h + L - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def _nl_holidays(year: int) -> set[date]:
+    """Netherlands public holidays observed on ICE Endex."""
+    e = _easter(year)
+    hols: set[date] = {
+        date(year, 1, 1),               # New Year's Day
+        e - timedelta(days=2),          # Good Friday
+        e,                              # Easter Sunday
+        e + timedelta(days=1),          # Easter Monday
+        e + timedelta(days=39),         # Ascension Day
+        e + timedelta(days=49),         # Whit Sunday (always Sun — no trading impact)
+        e + timedelta(days=50),         # Whit Monday
+        date(year, 12, 25),             # Christmas Day
+        date(year, 12, 26),             # 2nd Christmas Day (Boxing Day)
+    }
+    # King's Day: 27 Apr, moved to 26 Apr when 27 Apr is Sunday
+    kings = date(year, 4, 27)
+    if kings.weekday() == 6:
+        kings = date(year, 4, 26)
+    hols.add(kings)
+    # Liberation Day (5 May): every year from 2024; previously every 5 years
+    if year >= 2024 or year % 5 == 0:
+        hols.add(date(year, 5, 5))
+    return hols
+
+
+def _uk_holidays(year: int) -> set[date]:
+    """UK (England & Wales) public holidays observed on ICE Endex."""
+    e = _easter(year)
+    hols: set[date] = set()
+
+    # New Year's Day with Monday substitute
+    nyd = date(year, 1, 1)
+    if nyd.weekday() == 5:       # Sat → Mon 3 Jan
+        nyd = date(year, 1, 3)
+    elif nyd.weekday() == 6:     # Sun → Mon 2 Jan
+        nyd = date(year, 1, 2)
+    hols.add(nyd)
+
+    # Good Friday and Easter Monday
+    hols.add(e - timedelta(days=2))
+    hols.add(e + timedelta(days=1))
+
+    # Early May Bank Holiday: first Monday in May
+    d = date(year, 5, 1)
+    while d.weekday() != 0:
+        d += timedelta(days=1)
+    hols.add(d)
+
+    # Spring Bank Holiday: last Monday in May
+    d = date(year, 5, 31)
+    while d.weekday() != 0:
+        d -= timedelta(days=1)
+    hols.add(d)
+
+    # Summer Bank Holiday: last Monday in August
+    d = date(year, 8, 31)
+    while d.weekday() != 0:
+        d -= timedelta(days=1)
+    hols.add(d)
+
+    # Christmas and Boxing Day with weekend substitutes
+    xmas = date(year, 12, 25)
+    boxing = date(year, 12, 26)
+    wd = xmas.weekday()
+    if wd == 5:        # Sat: Xmas sub = Mon 27, Boxing sub = Tue 28
+        hols |= {date(year, 12, 27), date(year, 12, 28)}
+    elif wd == 6:      # Sun: Boxing stays Mon 26, Xmas sub = Tue 27
+        hols |= {boxing, date(year, 12, 27)}
+    else:
+        hols.add(xmas)
+        wd_b = boxing.weekday()
+        if wd_b == 5:      # Sat → Mon 28
+            hols.add(date(year, 12, 28))
+        elif wd_b == 6:    # Sun → Mon 27
+            hols.add(date(year, 12, 27))
+        else:
+            hols.add(boxing)
+
+    return hols
+
+
+# Module-level holiday cache to avoid recomputing per call
+_holiday_cache: dict[int, frozenset[date]] = {}
+
+
+def _get_holidays(year: int) -> frozenset[date]:
+    if year not in _holiday_cache:
+        _holiday_cache[year] = frozenset(_nl_holidays(year) | _uk_holidays(year))
+    return _holiday_cache[year]
+
+
+def ttf_is_business_day(d: date) -> bool:
+    """Return True if d is a business day on the ICE Endex TTF calendar.
+
+    Excludes weekends and Netherlands + UK (England & Wales) public holidays.
+
+    Args:
+        d: Date to test.
+
+    Examples:
+        >>> ttf_is_business_day(date(2026, 4, 27))   # King's Day NL
+        False
+        >>> ttf_is_business_day(date(2026, 4, 28))   # Tuesday after King's Day
+        True
+    """
+    if d.weekday() >= 5:
+        return False
+    return d not in _get_holidays(d.year)
+
+
+def _ttf_prev_bd(d: date) -> date:
+    """Most recent ICE Endex business day on or before d."""
+    while not ttf_is_business_day(d):
+        d -= timedelta(days=1)
+    return d
+
+
+def _ttf_prev_bd_strict(d: date) -> date:
+    """Most recent ICE Endex business day strictly before d."""
+    return _ttf_prev_bd(d - timedelta(days=1))
+
+
+def ttf_futures_ltd(contract_month: int, contract_year: int) -> date:
+    """Last trading day of the ICE Endex TTF futures for a given delivery month.
+
+    Defined as the last ICE Endex business day of the calendar month
+    immediately preceding the delivery month.
+
+    Args:
+        contract_month: Delivery month (1–12).
+        contract_year:  Delivery year (e.g. 2026).
+
+    Returns:
+        Futures last trading date.
+
+    Example:
+        >>> ttf_futures_ltd(6, 2026)
+        datetime.date(2026, 5, 29)
+    """
+    last_of_prev = date(contract_year, contract_month, 1) - timedelta(days=1)
+    return _ttf_prev_bd(last_of_prev)
+
+
+def ttf_expiry_date(contract_month: int, contract_year: int) -> date:
+    """Expiry date for an ICE Endex Dutch TTF Natural Gas options contract.
+
+    Official ICE Endex rule (European-style options settling into TTF futures):
+      1. Candidate = 5th calendar day before the 1st of the delivery month.
+      2. If the candidate is not an ICE Endex business day, move to the
+         nearest prior business day (NL + UK holiday calendar).
+      3. If the result coincides with the futures last trading day (LTD),
+         move one further business day earlier.
+
+    Args:
+        contract_month: Delivery month (1–12).
+        contract_year:  Delivery year (e.g. 2026).
+
+    Returns:
+        Option last exercise / expiry date.
+
+    Examples:
+        >>> ttf_expiry_date(6, 2026)   # Jun-26: 1 Jun − 5 = 27 May (Wed, BD) → 27 May
+        datetime.date(2026, 5, 27)
+        >>> ttf_expiry_date(1, 2026)   # Jan-26: 1 Jan − 5 = 27 Dec (Sat) → skip Xmas/Boxing → 24 Dec
+        datetime.date(2025, 12, 24)
+    """
+    candidate = date(contract_year, contract_month, 1) - timedelta(days=5)
+    expiry = _ttf_prev_bd(candidate)
+    if expiry == ttf_futures_ltd(contract_month, contract_year):
+        expiry = _ttf_prev_bd_strict(expiry)
+    return expiry
+
+
+def ttf_time_to_expiry(
+    contract_month: int,
+    contract_year: int,
+    reference: date | None = None,
+) -> float:
+    """ACT/365 time to TTF options expiry from a reference date.
+
+    Uses the official ICE Endex expiry rule (ttf_expiry_date) and
+    start-of-day convention (today is counted, result is floored at 0).
+
+    Args:
+        contract_month: Delivery month (1–12).
+        contract_year:  Delivery year.
+        reference:      Valuation date (default: today).
+
+    Returns:
+        T in years (float ≥ 0).
+    """
+    ref = reference or date.today()
+    exp = ttf_expiry_date(contract_month, contract_year)
+    return max((exp - ref).days + 1, 0) / 365.0
+
+
+def ttf_next_expiries(
+    n: int = 6,
+    reference: date | None = None,
+) -> list[tuple[str, date]]:
+    """Return the next n TTF option expiry dates from a reference date.
+
+    Args:
+        n:         Number of expiries to return (default: 6).
+        reference: Returns expiries on or after this date (default: today).
+
+    Returns:
+        List of (contract_label, expiry_date) tuples, e.g.
+        [('Jun 2026', datetime.date(2026, 5, 27)),
+         ('Jul 2026', datetime.date(2026, 6, 26)), ...]
+    """
+    ref = reference or date.today()
+    result: list[tuple[str, date]] = []
+    year, month = ref.year, ref.month
+    while len(result) < n:
+        exp = ttf_expiry_date(month, year)
+        if exp >= ref:
+            label = date(year, month, 1).strftime("%b %Y")
+            result.append((label, exp))
+        month += 1
+        if month > 12:
+            month, year = 1, year + 1
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Contract-name parser
 # ---------------------------------------------------------------------------
 
@@ -625,3 +875,45 @@ if __name__ == "__main__":
     print("\n=== Bachelier (negative price, EUR/MWh) ===")
     print(f"  Call : {call2:.4f}")
     print(f"  IV (Brent): {iv2:.6f}  (input sigma_n={sigma_n})")
+
+    # ------------------------------------------------------------------
+    # ICE Endex official expiry calendar — 2025 & 2026
+    # Rule: candidate = 1st of delivery month − 5 calendar days;
+    #       adjust to prior BD (NL+UK); if == futures LTD, move one BD earlier.
+    # ------------------------------------------------------------------
+    print("\n=== ICE Endex TTF Options Expiry Dates ===")
+    print(f"  {'Contract':<12}  {'Options Expiry':<16}  {'Futures LTD':<14}  Note")
+    print(f"  {'-'*12}  {'-'*16}  {'-'*14}  {'-'*35}")
+
+    for yr in (2025, 2026):
+        for mo in range(1, 13):
+            candidate = date(yr, mo, 1) - timedelta(days=5)
+            naive_bd  = _ttf_prev_bd(candidate)
+            fut_ltd   = ttf_futures_ltd(mo, yr)
+            opt_exp   = ttf_expiry_date(mo, yr)
+            label     = date(yr, mo, 1).strftime("%b %Y")
+            notes: list[str] = []
+            if not ttf_is_business_day(candidate):
+                notes.append(f"cand {candidate.day}/{candidate.month} not BD → adj")
+            if naive_bd == fut_ltd:
+                notes.append("== futures LTD → extra shift")
+            print(f"  {label:<12}  {opt_exp}        {fut_ltd}  {'  '.join(notes)}")
+
+    # Holiday spot-check
+    print("\n=== ICE Endex Holidays 2025 (weekdays only) ===")
+    for hd in sorted(d for d in _get_holidays(2025) if d.weekday() < 5):
+        print(f"  {hd}  {hd.strftime('%A')}")
+
+    print("\n=== ICE Endex Holidays 2026 (weekdays only) ===")
+    for hd in sorted(d for d in _get_holidays(2026) if d.weekday() < 5):
+        print(f"  {hd}  {hd.strftime('%A')}")
+
+    # ttf_next_expiries demo
+    _mo_abbr = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    _abbr_to_mo = {s: i+1 for i, s in enumerate(_mo_abbr)}
+    print("\n=== Next 6 TTF option expiries from 2026-04-22 ===")
+    ref_demo = date(2026, 4, 22)
+    for label, exp in ttf_next_expiries(6, reference=ref_demo):
+        mo_num = _abbr_to_mo[label[:3]]
+        T_val  = ttf_time_to_expiry(mo_num, int(label[-4:]), reference=ref_demo)
+        print(f"  {label:<10}  expiry={exp}  T={T_val:.4f}y")
