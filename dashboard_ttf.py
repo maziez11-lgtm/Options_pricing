@@ -1,10 +1,12 @@
-"""TTF Natural Gas Options — Streamlit dashboard (Pricer tab only).
+"""TTF Natural Gas Options — Streamlit dashboard.
+
+Tabs: Pricer, Structures.
 
 Run with:
     streamlit run dashboard_ttf.py
 
 Requires:
-    pip install streamlit pandas openpyxl
+    pip install streamlit pandas openpyxl plotly
     (plus the project's own deps: numpy, scipy)
 """
 
@@ -14,6 +16,7 @@ import math
 from io import BytesIO
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from black76_ttf import (
@@ -21,6 +24,7 @@ from black76_ttf import (
     bach_call, bach_put, bach_greeks,
     b76_implied_vol, bach_implied_vol,
 )
+import structures_ttf as structs_mod
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +175,7 @@ st.caption(
 # Tabs (only Pricer for now)
 # ---------------------------------------------------------------------------
 
-tab_pricer, = st.tabs(["Pricer"])
+tab_pricer, tab_structures = st.tabs(["Pricer", "Structures"])
 
 with tab_pricer:
 
@@ -336,6 +340,313 @@ with tab_pricer:
         }),
         file_name="ttf_pricer_export.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="export_pricer",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tab 2 — Structures
+# ---------------------------------------------------------------------------
+
+_STRUCT_SPECS = {
+    "Straddle":         {"strikes": ["K"]},
+    "Strangle":         {"strikes": ["K_put", "K_call"]},
+    "Bull call spread": {"strikes": ["K_lo", "K_hi"]},
+    "Bear put spread":  {"strikes": ["K_lo", "K_hi"]},
+    "Butterfly":        {"strikes": ["K_lo", "K_mid", "K_hi"]},
+    "Condor":           {"strikes": ["K1", "K2", "K3", "K4"]},
+    "Collar":           {"strikes": ["K_put", "K_call"]},
+    "Risk reversal":    {"strikes": ["K_put", "K_call"]},
+    "Calendar spread":  {"strikes": ["K"], "extra": ["T_near (days)", "T_far (days)"]},
+    "Ratio spread":     {"strikes": ["K_lo", "K_hi"], "extra": ["Ratio (short qty)"]},
+}
+
+
+def _build_structure(
+    name: str,
+    F: float, T: float, r: float, sigma: float,
+    ks: dict, extra: dict,
+):
+    """Dispatch to the right structures_ttf function with the right kwargs."""
+    if name == "Straddle":
+        return structs_mod.straddle(F, K=ks["K"], T=T, r=r, sigma=sigma)
+    if name == "Strangle":
+        return structs_mod.strangle(F, K_put=ks["K_put"], K_call=ks["K_call"],
+                                    T=T, r=r, sigma=sigma)
+    if name == "Bull call spread":
+        return structs_mod.bull_call_spread(F, K_lo=ks["K_lo"], K_hi=ks["K_hi"],
+                                            T=T, r=r, sigma=sigma)
+    if name == "Bear put spread":
+        return structs_mod.bear_put_spread(F, K_lo=ks["K_lo"], K_hi=ks["K_hi"],
+                                           T=T, r=r, sigma=sigma)
+    if name == "Butterfly":
+        return structs_mod.butterfly(F, K_lo=ks["K_lo"], K_mid=ks["K_mid"],
+                                     K_hi=ks["K_hi"], T=T, r=r, sigma=sigma)
+    if name == "Condor":
+        return structs_mod.condor(F, K1=ks["K1"], K2=ks["K2"],
+                                  K3=ks["K3"], K4=ks["K4"],
+                                  T=T, r=r, sigma=sigma)
+    if name == "Collar":
+        return structs_mod.collar(F, K_put=ks["K_put"], K_call=ks["K_call"],
+                                  T=T, r=r, sigma=sigma)
+    if name == "Risk reversal":
+        return structs_mod.risk_reversal(F, K_put=ks["K_put"], K_call=ks["K_call"],
+                                         T=T, r=r, sigma=sigma)
+    if name == "Calendar spread":
+        return structs_mod.calendar_spread(
+            F, K=ks["K"],
+            T_far=extra["T_far (days)"] / 365.0,
+            T_near=extra["T_near (days)"] / 365.0,
+            r=r, sigma=sigma,
+        )
+    if name == "Ratio spread":
+        return structs_mod.ratio_spread(
+            F, K_lo=ks["K_lo"], K_hi=ks["K_hi"],
+            T=T, r=r, sigma=sigma,
+            ratio=int(extra["Ratio (short qty)"]),
+        )
+    raise ValueError(f"Unknown structure: {name}")
+
+
+with tab_structures:
+
+    st.subheader("Structure selection")
+    struct_name = st.selectbox(
+        "Choose a structure",
+        list(_STRUCT_SPECS.keys()),
+        help="10 common multi-leg structures priced under Black-76",
+    )
+
+    spec = _STRUCT_SPECS[struct_name]
+
+    # Dynamic strike inputs based on the selected structure
+    st.markdown("**Strike inputs**")
+    strike_cols = st.columns(max(len(spec["strikes"]), 2))
+    ks: dict = {}
+    # Provide sensible defaults around the forward F
+    width = max(F * 0.10, 1.0)
+    default_map = {
+        "K":      F,
+        "K_put":  F - width,
+        "K_call": F + width,
+        "K_lo":   F - width,
+        "K_mid":  F,
+        "K_hi":   F + width,
+        "K1":     F - 2 * width,
+        "K2":     F - width,
+        "K3":     F + width,
+        "K4":     F + 2 * width,
+    }
+    for i, kname in enumerate(spec["strikes"]):
+        with strike_cols[i]:
+            ks[kname] = st.number_input(
+                kname,
+                value=float(default_map.get(kname, F)),
+                step=0.5, min_value=0.01, max_value=500.0,
+                key=f"struct_{struct_name}_{kname}",
+            )
+
+    # Extra inputs (calendar, ratio)
+    extra: dict = {}
+    if "extra" in spec:
+        st.markdown("**Additional inputs**")
+        ex_cols = st.columns(len(spec["extra"]))
+        defaults_extra = {
+            "T_near (days)": 30,
+            "T_far (days)":  180,
+            "Ratio (short qty)": 2,
+        }
+        for j, ename in enumerate(spec["extra"]):
+            with ex_cols[j]:
+                if "Ratio" in ename:
+                    extra[ename] = st.number_input(
+                        ename, value=defaults_extra[ename],
+                        step=1, min_value=1, max_value=10,
+                        key=f"struct_{struct_name}_{ename}",
+                    )
+                else:
+                    extra[ename] = st.number_input(
+                        ename, value=defaults_extra[ename],
+                        step=1, min_value=1, max_value=1825,
+                        key=f"struct_{struct_name}_{ename}",
+                    )
+
+    # Reuse Forward, sigma, rate, T from the sidebar
+    st.caption(
+        f"Using sidebar values: F = **{F:.2f} EUR/MWh**, "
+        f"σ = **{sigma_pct:.0f}%**, T = **{T_days} days**, r = **{r_pct:.2f}%**."
+    )
+
+    # Validate strikes (must be strictly increasing for multi-strike structures)
+    validation_error = None
+    if struct_name == "Strangle" and ks["K_put"] >= ks["K_call"]:
+        validation_error = "K_put must be strictly less than K_call."
+    elif struct_name in ("Bull call spread", "Bear put spread", "Ratio spread") \
+            and ks["K_lo"] >= ks["K_hi"]:
+        validation_error = "K_lo must be strictly less than K_hi."
+    elif struct_name == "Butterfly" and not (ks["K_lo"] < ks["K_mid"] < ks["K_hi"]):
+        validation_error = "Require K_lo < K_mid < K_hi."
+    elif struct_name == "Condor" and not (ks["K1"] < ks["K2"] < ks["K3"] < ks["K4"]):
+        validation_error = "Require K1 < K2 < K3 < K4."
+    elif struct_name in ("Collar", "Risk reversal") and ks["K_put"] >= ks["K_call"]:
+        validation_error = "K_put must be strictly less than K_call."
+    elif struct_name == "Calendar spread" \
+            and extra["T_far (days)"] <= extra["T_near (days)"]:
+        validation_error = "T_far must be strictly greater than T_near."
+
+    if validation_error:
+        st.error(f"⚠ {validation_error}")
+        st.stop()
+
+    # Compute structure
+    try:
+        result = _build_structure(struct_name, F, T, r, sigma, ks, extra)
+    except Exception as exc:
+        st.error(f"Pricing error: {exc}")
+        st.stop()
+
+    # ─── Metrics row ─────────────────────────────────────────────────────
+    st.subheader(f"{result.name} — Summary")
+
+    m_cols = st.columns(5)
+    premium_label = "Debit" if result.price >= 0 else "Credit"
+    m_cols[0].metric(
+        f"Net premium ({premium_label})",
+        f"{result.price:+.4f} EUR/MWh",
+    )
+    if result.max_profit == math.inf:
+        mp_txt = "∞"
+    else:
+        mp_txt = f"{result.max_profit:+.4f}"
+    if result.max_loss == -math.inf:
+        ml_txt = "−∞"
+    else:
+        ml_txt = f"{result.max_loss:+.4f}"
+    m_cols[1].metric("Max profit", mp_txt)
+    m_cols[2].metric("Max loss",   ml_txt)
+
+    if result.breakevens:
+        be_str = ", ".join(f"{b:.3f}" for b in result.breakevens)
+    else:
+        be_str = "—"
+    m_cols[3].metric("Breakevens (EUR/MWh)", be_str)
+
+    m_cols[4].metric("Number of legs", f"{len(result.legs)}")
+
+    # ─── Net Greeks ─────────────────────────────────────────────────────
+    g_cols = st.columns(4)
+    g_cols[0].metric("Net Δ",       f"{result.delta:+.4f}")
+    g_cols[1].metric("Net Γ",       f"{result.gamma:+.6f}")
+    g_cols[2].metric("Net ν",       f"{result.vega:+.4f}")
+    g_cols[3].metric("Net Θ/day",   f"{result.theta:+.4f}")
+
+    # ─── Legs DataFrame ─────────────────────────────────────────────────
+    st.subheader("Legs detail")
+    legs_df = pd.DataFrame([
+        {
+            "#": i + 1,
+            "Side": "Long" if leg.sign > 0 else "Short",
+            "Type": leg.option_type,
+            "Qty":  leg.qty,
+            "Strike": round(leg.K, 4),
+            "T (y)": round(leg.T, 4),
+            "σ":    round(leg.sigma, 4),
+            "Unit price": round(leg.unit_price, 6),
+            "Unit Δ": round(leg.unit_delta, 6),
+            "Unit Γ": round(leg.unit_gamma, 8),
+            "Unit ν": round(leg.unit_vega, 6),
+            "Unit Θ/day": round(leg.unit_theta, 6),
+        }
+        for i, leg in enumerate(result.legs)
+    ])
+    st.dataframe(legs_df, hide_index=True, use_container_width=True)
+
+    # ─── P&L chart at expiry (Plotly) ───────────────────────────────────
+    st.subheader("P&L at expiry")
+
+    pnl_df = pd.DataFrame(result.pnl_at_expiry, columns=["F_T", "PnL"])
+
+    fig = go.Figure()
+    # Shade profit/loss regions
+    fig.add_trace(go.Scatter(
+        x=pnl_df["F_T"], y=pnl_df["PnL"],
+        fill="tozeroy",
+        fillcolor="rgba(34, 197, 94, 0.18)",  # green for profit
+        line=dict(color="#22c55e", width=0),
+        name="Profit",
+        showlegend=False,
+        hoverinfo="skip",
+    ))
+    # Main P&L curve
+    fig.add_trace(go.Scatter(
+        x=pnl_df["F_T"], y=pnl_df["PnL"],
+        mode="lines",
+        line=dict(color="#3b82f6", width=2.5),
+        name="P&L",
+        hovertemplate="F_T = %{x:.2f} EUR/MWh<br>P&L = %{y:+.4f}<extra></extra>",
+    ))
+    # Zero line
+    fig.add_hline(y=0, line_color="#64748b", line_width=1, line_dash="dash")
+    # Forward reference line
+    fig.add_vline(
+        x=F, line_color="#facc15", line_width=1, line_dash="dot",
+        annotation_text=f"F = {F:.2f}",
+        annotation_position="top",
+        annotation_font_color="#facc15",
+    )
+    # Breakeven markers
+    for be in result.breakevens:
+        fig.add_vline(
+            x=be, line_color="#f87171", line_width=1, line_dash="dot",
+            annotation_text=f"BE {be:.2f}",
+            annotation_position="bottom",
+            annotation_font_color="#f87171",
+        )
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0f0f1a",
+        plot_bgcolor="#0f0f1a",
+        font=dict(color="#cbd5e1", size=12),
+        margin=dict(l=40, r=20, t=10, b=40),
+        height=420,
+        xaxis=dict(
+            title="Forward at expiry F_T (EUR/MWh)",
+            gridcolor="#1e1e32", zerolinecolor="#2a2a42",
+        ),
+        yaxis=dict(
+            title="P&L (EUR/MWh)",
+            gridcolor="#1e1e32", zerolinecolor="#2a2a42",
+        ),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ─── Export to Excel ────────────────────────────────────────────────
+    struct_summary_df = pd.DataFrame([{
+        "Structure": result.name,
+        "Net premium (EUR/MWh)": round(result.price, 6),
+        "Net Δ": round(result.delta, 6),
+        "Net Γ": round(result.gamma, 8),
+        "Net ν": round(result.vega, 6),
+        "Net Θ/day": round(result.theta, 6),
+        "Max profit": (result.max_profit if result.max_profit != math.inf else "inf"),
+        "Max loss":   (result.max_loss   if result.max_loss   != -math.inf else "-inf"),
+        "Breakevens": ", ".join(f"{b:.4f}" for b in result.breakevens) or "—",
+    }])
+    pnl_export_df = pnl_df.rename(columns={"F_T": "F_T (EUR/MWh)",
+                                           "PnL": "PnL (EUR/MWh)"})
+
+    st.divider()
+    st.download_button(
+        label="⬇ Export to Excel",
+        data=excel_bytes({
+            "Summary": struct_summary_df,
+            "Legs":    legs_df,
+            "PnL at expiry": pnl_export_df,
+        }),
+        file_name=f"ttf_structure_{struct_name.lower().replace(' ', '_')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="export_structures",
     )
 
 
@@ -343,5 +654,5 @@ st.sidebar.divider()
 st.sidebar.caption(
     "Prices are indicative. Black-76 for F > ~5 EUR/MWh; "
     "Bachelier for low or negative prices. "
-    "Uses `black76_ttf.py`."
+    "Uses `black76_ttf.py` and `structures_ttf.py`."
 )
