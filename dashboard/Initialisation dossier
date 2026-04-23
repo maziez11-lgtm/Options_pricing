@@ -1,0 +1,10 @@
+Dans dashboard_ttf.py, remplace l'import :
+from black76_ttf import ...
+
+Par un import avec le chemin absolu :
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from black76_ttf import ...
+
+Applique ça à tous les imports des modules TTF.
