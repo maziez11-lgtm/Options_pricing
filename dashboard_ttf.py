@@ -14,8 +14,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import sys
 from io import BytesIO
 from pathlib import Path
+
+# Make the project's TTF modules importable regardless of CWD
+# (works when launched via `streamlit run dashboard_ttf.py` from any directory).
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import numpy as np
 import pandas as pd
