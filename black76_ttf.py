@@ -77,6 +77,200 @@ def t_futures_from_delivery(
 
 
 # ---------------------------------------------------------------------------
+# ICE Endex Dutch TTF Natural Gas — Official expiry calendar
+# ---------------------------------------------------------------------------
+# Rules (ICE Endex Dutch TTF Natural Gas Options):
+#   - European-style options settling into ICE Endex TTF futures
+#   - Expiry candidate = 5 calendar days BEFORE the 1st calendar day
+#     of the delivery month
+#   - If the candidate is not a business day, roll back to the previous
+#     business day
+#   - If that rolled-back business day coincides with the last trading
+#     day of the underlying future, roll back one more business day
+#   - Holiday calendar = intersection of NL + UK bank holidays relevant
+#     to ICE Endex (New Year, Good Friday, Easter Monday, Labour Day,
+#     Christmas, Boxing Day)
+#
+# NB: this is INDEPENDENT from `options_expiry_from_delivery` above,
+# which uses a simpler "5 business days before futures LTD" convention.
+# The two functions deliberately coexist: existing pricing code that
+# imports `options_expiry_from_delivery` keeps its behaviour; new code
+# using the ICE Endex rule should call `ttf_expiry_date` instead.
+
+
+def _easter_sunday(year: int) -> date:
+    """Gregorian Easter Sunday via Gauss's algorithm."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month, day = divmod(114 + h + l - 7 * m, 31)
+    return date(year, month, day + 1)
+
+
+def _ttf_holidays(year: int) -> frozenset[date]:
+    """NL + UK bank holidays observed by ICE Endex for TTF trading.
+
+    Conservative intersection — covers the six fixed closures that both
+    Dutch and UK markets share:
+        Jan 1  New Year's Day
+        GF-2   Good Friday   (Easter Sunday − 2)
+        EM+1   Easter Monday (Easter Sunday + 1)
+        May 1  Labour Day (NL) — also covers early-May UK bank holiday
+        Dec 25 Christmas Day
+        Dec 26 Boxing Day / 2nd Christmas Day
+    """
+    easter = _easter_sunday(year)
+    return frozenset([
+        date(year, 1, 1),
+        easter - timedelta(days=2),   # Good Friday
+        easter + timedelta(days=1),   # Easter Monday
+        date(year, 5, 1),             # Labour Day (NL)
+        date(year, 12, 25),
+        date(year, 12, 26),
+    ])
+
+
+def ttf_is_business_day(d: date) -> bool:
+    """Return True if *d* is a trading day on ICE Endex.
+
+    A TTF business day is Mon–Fri excluding the NL + UK bank holidays
+    listed in :func:`_ttf_holidays`.
+    """
+    if d.weekday() >= 5:     # Saturday=5, Sunday=6
+        return False
+    return d not in _ttf_holidays(d.year)
+
+
+def _ttf_prev_bd(d: date) -> date:
+    """Roll *d* back to the previous ICE Endex business day (inclusive)."""
+    while not ttf_is_business_day(d):
+        d -= timedelta(days=1)
+    return d
+
+
+def _ttf_futures_ltd(contract_year: int, contract_month: int) -> date:
+    """ICE Endex TTF futures last trading day.
+
+    = last ICE Endex business day of the month *before* the delivery month.
+    Respects the NL+UK holiday calendar (so e.g. a LTD falling on Good
+    Friday is rolled back).
+    """
+    first_of_delivery = date(contract_year, contract_month, 1)
+    last_of_prev_month = first_of_delivery - timedelta(days=1)
+    return _ttf_prev_bd(last_of_prev_month)
+
+
+def ttf_expiry_date(contract_month: int, contract_year: int) -> date:
+    """Official ICE Endex Dutch TTF option expiry date.
+
+    Parameters
+    ----------
+    contract_month : 1–12 (the delivery month, e.g. 6 for Jun)
+    contract_year  : 4-digit year, e.g. 2026
+
+    Returns
+    -------
+    :class:`datetime.date` — the last trading day of the option.
+
+    Algorithm
+    ---------
+    1. Candidate = 1st of delivery month − 5 calendar days
+    2. If the candidate is not a business day → previous business day
+    3. If that business day equals the futures LTD → step back one more
+       business day
+
+    Examples
+    --------
+    >>> ttf_expiry_date(6, 2026)   # Jun-26
+    datetime.date(2026, 5, 27)
+    >>> ttf_expiry_date(1, 2026)   # Jan-26 — Dec-25 holidays bite
+    datetime.date(2025, 12, 24)
+    """
+    if not (1 <= contract_month <= 12):
+        raise ValueError(f"contract_month must be in 1..12, got {contract_month}")
+
+    delivery_first = date(contract_year, contract_month, 1)
+    candidate = delivery_first - timedelta(days=5)
+    candidate = _ttf_prev_bd(candidate)
+
+    futures_ltd = _ttf_futures_ltd(contract_year, contract_month)
+    if candidate == futures_ltd:
+        candidate = _ttf_prev_bd(candidate - timedelta(days=1))
+    return candidate
+
+
+def ttf_time_to_expiry(
+    contract_month: int,
+    contract_year: int,
+    reference: date | None = None,
+) -> float:
+    """ACT/365 time to TTF option expiry (start-of-day, today included).
+
+    Returns 0 if the expiry is in the past.
+
+    Parameters
+    ----------
+    contract_month : 1–12 (the delivery month)
+    contract_year  : 4-digit year
+    reference      : valuation date (default: today)
+    """
+    ref = reference or date.today()
+    exp = ttf_expiry_date(contract_month, contract_year)
+    return max((exp - ref).days + 1, 0) / 365.0
+
+
+_MONTH_CODES_ICE = "FGHJKMNQUVXZ"
+
+
+def ttf_next_expiries(
+    n: int = 6,
+    reference: date | None = None,
+) -> list[tuple[str, date]]:
+    """Return the next *n* upcoming ICE Endex TTF option expiries.
+
+    Parameters
+    ----------
+    n          : number of consecutive monthly contracts to return
+    reference  : valuation date (default: today)
+
+    Returns
+    -------
+    list of (contract_code, expiry_date) tuples, ordered ascending.
+    Contract codes follow ICE convention: ``TTF<M><YY>``.
+
+    Example
+    -------
+    >>> ttf_next_expiries(3, reference=date(2026, 4, 23))
+    [('TTFK26', date(2026, 4, 24)),
+     ('TTFM26', date(2026, 5, 27)),
+     ('TTFN26', date(2026, 6, 26))]
+    """
+    if n < 1:
+        raise ValueError(f"n must be >= 1, got {n}")
+
+    ref = reference or date.today()
+    out: list[tuple[str, date]] = []
+    year, month = ref.year, ref.month
+
+    while len(out) < n:
+        exp = ttf_expiry_date(month, year)
+        if exp > ref:
+            code = f"TTF{_MONTH_CODES_ICE[month - 1]}{str(year)[-2:]}"
+            out.append((code, exp))
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Contract-name parser
 # ---------------------------------------------------------------------------
 
@@ -625,3 +819,39 @@ if __name__ == "__main__":
     print("\n=== Bachelier (negative price, EUR/MWh) ===")
     print(f"  Call : {call2:.4f}")
     print(f"  IV (Brent): {iv2:.6f}  (input sigma_n={sigma_n})")
+
+    # ── ICE Endex official expiry calendar ───────────────────────────────
+    _MONTH_LABELS = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+
+    print("\n=== ICE Endex Dutch TTF — Official Expiry Calendar ===")
+    for yr in (2025, 2026):
+        print(f"\n  {yr}")
+        print(f"  {'Contract':<10}{'Delivery':<12}{'Candidate':<14}{'Expiry':<12}  Futures LTD")
+        print(f"  {'-' * 64}")
+        for m in range(1, 13):
+            exp = ttf_expiry_date(m, yr)
+            fut = _ttf_futures_ltd(yr, m)
+            delivery = date(yr, m, 1)
+            candidate = _ttf_prev_bd(delivery - timedelta(days=5))
+            code = f"TTF{_MONTH_CODES_ICE[m-1]}{str(yr)[-2:]}"
+            holiday_flag = " *" if candidate != (delivery - timedelta(days=5)) else "  "
+            print(
+                f"  {code:<10}{_MONTH_LABELS[m-1]}-{str(yr)[-2:]:<8}"
+                f"{str(candidate):<12}{holiday_flag}{str(exp):<12}  {fut}"
+            )
+        print("  (* = candidate adjusted back due to weekend/holiday)")
+
+    # Next 6 expiries from a reference date
+    ref = date(2026, 4, 23)
+    print(f"\n  Next 6 expiries (reference = {ref}):")
+    for code, exp in ttf_next_expiries(6, reference=ref):
+        T_opt = ttf_time_to_expiry(
+            int({_MONTH_CODES_ICE[i]: i + 1 for i in range(12)}[code[3]]),
+            2000 + int(code[-2:]),
+            reference=ref,
+        )
+        days = (exp - ref).days + 1
+        print(f"    {code}  expiry={exp}  T={T_opt:.4f} y  ({days} cal days)")
