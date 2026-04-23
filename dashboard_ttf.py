@@ -1,20 +1,23 @@
 """TTF Natural Gas Options — Streamlit dashboard.
 
-Tabs: Pricer, Structures.
+Tabs: Pricer, Structures, Vol Surface.
 
 Run with:
     streamlit run dashboard_ttf.py
 
 Requires:
     pip install streamlit pandas openpyxl plotly
-    (plus the project's own deps: numpy, scipy)
+    (plus the project's own deps: numpy, scipy, pandas, requests)
 """
 
 from __future__ import annotations
 
+import json
 import math
 from io import BytesIO
+from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -175,7 +178,7 @@ st.caption(
 # Tabs (only Pricer for now)
 # ---------------------------------------------------------------------------
 
-tab_pricer, tab_structures = st.tabs(["Pricer", "Structures"])
+tab_pricer, tab_structures, tab_vol = st.tabs(["Pricer", "Structures", "Vol Surface"])
 
 with tab_pricer:
 
@@ -650,9 +653,298 @@ with tab_structures:
     )
 
 
+# ---------------------------------------------------------------------------
+# Tab 3 — Vol Surface (3D)
+# ---------------------------------------------------------------------------
+
+_VOL_JSON_PATH = Path(__file__).parent / "ttf_output" / "ttf_vol_surface.json"
+
+
+@st.cache_data(show_spinner=False)
+def _load_precomputed_surface(path: str) -> dict | None:
+    """Load the pre-computed vol surface JSON from ttf_output/.
+
+    Returns a dict with keys 'reference_date' and 'surface' (list of
+    {T, contract, F, strike, vol, model}) or None if the file is missing.
+    """
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+@st.cache_data(show_spinner=True)
+def _build_live_surface(
+    reference_iso: str,
+    atm_vol: float,
+    _cache_key: int = 0,
+) -> tuple[pd.DataFrame, str]:
+    """Rebuild a fresh vol surface via ttf_market_data.
+
+    Uses the default ATM vols but scales them so that the 3-month ATM
+    lands on the sidebar's lognormal vol. Returns a long-format DataFrame
+    and the reference date ISO string.
+    """
+    from datetime import date
+    from ttf_market_data import TTFForwardCurve, VolatilitySurfaceBuilder
+
+    ref = date.fromisoformat(reference_iso)
+    fwd = TTFForwardCurve(ref).load()
+
+    # Scale the built-in ATM vols so that the 3M pillar matches the sidebar sigma
+    builder = VolatilitySurfaceBuilder(fwd, ref)
+    base = dict(builder._ATM_VOLS)
+    scale = atm_vol / base[3 / 12]
+    atm_scaled = {t: v * scale for t, v in base.items()}
+
+    surface = builder.build(atm_vols=atm_scaled)
+    df = surface.to_dataframe()
+    return df, str(ref)
+
+
+def _surface_to_grid(df: pd.DataFrame) -> tuple[list[float], list[float], np.ndarray]:
+    """Pivot the long-format surface DataFrame to (Ts, Ks, Z) for Plotly."""
+    Ts = sorted(df["T"].unique())
+    Ks = sorted(df["strike"].unique())
+    Z = np.full((len(Ts), len(Ks)), np.nan)
+    for i, t in enumerate(Ts):
+        slice_ = df[df["T"] == t].set_index("strike")["vol"]
+        for j, k in enumerate(Ks):
+            if k in slice_.index:
+                Z[i, j] = float(slice_.loc[k])
+    # Fill NaNs by row-level linear interpolation on strike
+    for i in range(len(Ts)):
+        mask = ~np.isnan(Z[i])
+        if mask.sum() >= 2:
+            Z[i] = np.interp(Ks, np.array(Ks)[mask], Z[i][mask])
+    return Ts, Ks, Z
+
+
+with tab_vol:
+
+    st.subheader("TTF implied-volatility surface (3D)")
+
+    # Data-source selection
+    precomp = _load_precomputed_surface(str(_VOL_JSON_PATH))
+
+    source_options = []
+    if precomp is not None:
+        source_options.append("Pre-computed (ttf_output/ttf_vol_surface.json)")
+    source_options.append("Live rebuild (ttf_market_data.VolatilitySurfaceBuilder)")
+
+    col_src, col_info = st.columns([2, 3])
+    with col_src:
+        chosen_src = st.radio(
+            "Data source",
+            source_options,
+            key="vol_src",
+            help="The pre-computed file is what ttf_market_data.py last exported. "
+                 "Live rebuild fetches a forward curve and constructs the surface.",
+        )
+
+    # Load the chosen surface into `df` + `ref_date_str`
+    if chosen_src.startswith("Pre-computed"):
+        df_surface = pd.DataFrame(precomp["surface"])
+        ref_date_str = precomp["reference_date"]
+    else:
+        live_ref = st.session_state.get("vol_live_ref",
+                                        pd.Timestamp.today().strftime("%Y-%m-%d"))
+        with col_info:
+            live_ref = st.text_input(
+                "Reference date (YYYY-MM-DD)",
+                value=live_ref,
+                key="vol_live_ref",
+            )
+        try:
+            df_surface, ref_date_str = _build_live_surface(live_ref, sigma)
+        except Exception as exc:
+            st.error(f"Live rebuild failed: {exc}")
+            st.stop()
+
+    with col_info:
+        st.caption(
+            f"Reference date : **{ref_date_str}** · "
+            f"{len(df_surface['T'].unique())} maturities × "
+            f"{len(df_surface['strike'].unique())} unique strikes · "
+            f"{len(df_surface)} grid points"
+        )
+
+    # Strike-moneyness trim
+    col_mony, col_maxT = st.columns(2)
+    with col_mony:
+        mony_range = st.slider(
+            "Strike moneyness range K/F",
+            min_value=0.3, max_value=3.0, value=(0.5, 1.8), step=0.05,
+            key="vol_moneyness",
+            help="Restrict the displayed strikes to this fraction of the forward.",
+        )
+    with col_maxT:
+        max_T_years = st.slider(
+            "Max maturity (years)",
+            min_value=0.25, max_value=3.0, value=2.0, step=0.25,
+            key="vol_maxT",
+        )
+
+    # Filter DataFrame
+    def _in_moneyness(row) -> bool:
+        try:
+            ratio = row["strike"] / row["F"]
+        except ZeroDivisionError:
+            return False
+        return mony_range[0] <= ratio <= mony_range[1]
+
+    df_filt = df_surface[df_surface["T"] <= max_T_years].copy()
+    df_filt = df_filt[df_filt.apply(_in_moneyness, axis=1)]
+
+    if df_filt.empty:
+        st.warning("No surface points in the selected range. Loosen the filters.")
+        st.stop()
+
+    Ts, Ks, Z = _surface_to_grid(df_filt)
+
+    # Tenor labels for the y-axis
+    def _tenor_label(t: float) -> str:
+        if t < 1 / 12 + 0.001:     return "1M"
+        if t < 2 / 12 + 0.001:     return "2M"
+        if t < 3 / 12 + 0.001:     return "3M"
+        if t < 6 / 12 + 0.001:     return "6M"
+        if t < 9 / 12 + 0.001:     return "9M"
+        if abs(t - 1.0) < 0.05:    return "1Y"
+        if abs(t - 2.0) < 0.05:    return "2Y"
+        return f"{t:.2f}y"
+
+    tenor_labels = [_tenor_label(t) for t in Ts]
+
+    # ─── 3D Surface plot ─────────────────────────────────────────────────
+    surface_fig = go.Figure(data=[go.Surface(
+        x=Ks,
+        y=tenor_labels,
+        z=Z * 100.0,   # show vol in %
+        colorscale=[
+            [0.00, "#1e3a5f"],
+            [0.25, "#2563eb"],
+            [0.50, "#7c3aed"],
+            [0.75, "#db2777"],
+            [1.00, "#ef4444"],
+        ],
+        contours={"z": {"show": True, "usecolormap": True,
+                        "highlightcolor": "#ffffff",
+                        "project": {"z": True}}},
+        colorbar=dict(title="σ (%)", tickfont=dict(color="#cbd5e1")),
+        hovertemplate=(
+            "Strike: %{x:.2f} EUR/MWh<br>"
+            "Tenor: %{y}<br>"
+            "σ: %{z:.2f}%<extra></extra>"
+        ),
+        opacity=0.94,
+    )])
+    surface_fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0f0f1a",
+        scene=dict(
+            bgcolor="#0f0f1a",
+            xaxis=dict(title="Strike (EUR/MWh)",
+                       gridcolor="#2a2a42", color="#cbd5e1"),
+            yaxis=dict(title="Tenor",
+                       gridcolor="#2a2a42", color="#cbd5e1"),
+            zaxis=dict(title="σ (%)",
+                       gridcolor="#2a2a42", color="#cbd5e1"),
+            camera=dict(eye=dict(x=1.7, y=-1.7, z=0.9)),
+        ),
+        margin=dict(l=10, r=10, t=10, b=10),
+        height=560,
+    )
+    st.plotly_chart(surface_fig, use_container_width=True)
+
+    # ─── Smile cross-sections per tenor ─────────────────────────────────
+    with st.expander("Smile cross-sections (per tenor)"):
+        smile_fig = go.Figure()
+        palette = ["#60a5fa", "#a78bfa", "#34d399", "#f87171",
+                   "#facc15", "#fb923c", "#e879f9", "#2dd4bf"]
+        for idx, t in enumerate(Ts):
+            mask = df_filt["T"] == t
+            sub = df_filt[mask].sort_values("strike")
+            if len(sub) == 0:
+                continue
+            smile_fig.add_trace(go.Scatter(
+                x=sub["strike"],
+                y=sub["vol"] * 100.0,
+                mode="lines+markers",
+                name=tenor_labels[idx],
+                line=dict(color=palette[idx % len(palette)], width=2),
+                marker=dict(size=6),
+                hovertemplate=(
+                    f"{tenor_labels[idx]}<br>"
+                    "K=%{x:.2f}<br>"
+                    "σ=%{y:.2f}%<extra></extra>"
+                ),
+            ))
+        smile_fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0f0f1a",
+            plot_bgcolor="#0f0f1a",
+            xaxis=dict(title="Strike (EUR/MWh)",
+                       gridcolor="#1e1e32", color="#cbd5e1"),
+            yaxis=dict(title="σ (%)",
+                       gridcolor="#1e1e32", color="#cbd5e1"),
+            legend=dict(font=dict(color="#cbd5e1")),
+            margin=dict(l=10, r=10, t=10, b=40),
+            height=380,
+        )
+        st.plotly_chart(smile_fig, use_container_width=True)
+
+    # ─── Pivot table preview ────────────────────────────────────────────
+    pivot_df = (
+        df_filt.pivot_table(index="T", columns="strike", values="vol",
+                            aggfunc="first")
+        .sort_index(axis=0)
+        .sort_index(axis=1)
+    )
+    pivot_df.index = [f"{t:.4f}" for t in pivot_df.index]
+    pivot_df.index.name = "T (y)"
+
+    with st.expander("Pivot table (T × strike)"):
+        st.dataframe(
+            pivot_df.style.format("{:.4f}"),
+            use_container_width=True,
+        )
+
+    # ─── Export to Excel ─────────────────────────────────────────────────
+    long_export = df_filt[["T", "contract", "F", "strike", "vol", "model"]].copy()
+    long_export.columns = ["T (y)", "Contract", "F (EUR/MWh)",
+                           "Strike (EUR/MWh)", "σ", "Model"]
+    pivot_export = pivot_df.reset_index()
+
+    meta_df = pd.DataFrame({
+        "Field": ["Reference date", "Data source", "# tenors",
+                  "# unique strikes", "# grid points",
+                  "Strike moneyness min (K/F)", "Strike moneyness max (K/F)",
+                  "Max maturity filter (y)"],
+        "Value": [ref_date_str, chosen_src,
+                  len(df_filt['T'].unique()),
+                  len(df_filt['strike'].unique()),
+                  len(df_filt),
+                  mony_range[0], mony_range[1], max_T_years],
+    })
+
+    st.divider()
+    st.download_button(
+        label="⬇ Export to Excel",
+        data=excel_bytes({
+            "Meta":  meta_df,
+            "Surface (long)": long_export,
+            "Surface (pivot)": pivot_export,
+        }),
+        file_name="ttf_vol_surface_export.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="export_vol",
+    )
+
+
 st.sidebar.divider()
 st.sidebar.caption(
     "Prices are indicative. Black-76 for F > ~5 EUR/MWh; "
     "Bachelier for low or negative prices. "
-    "Uses `black76_ttf.py` and `structures_ttf.py`."
+    "Uses `black76_ttf.py`, `structures_ttf.py`, `ttf_market_data.py`."
 )
