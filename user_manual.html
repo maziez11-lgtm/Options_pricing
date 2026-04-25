@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TTF Options — User Manual</title>
+<style>
+@page { size: A4; margin: 18mm 15mm; }
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  color: #1f2937;
+  background: #ffffff;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 32px;
+  line-height: 1.55;
+  font-size: 11pt;
+}
+h1 {
+  color: #0b5394;
+  border-bottom: 3px solid #0b5394;
+  padding-bottom: 6px;
+  margin-top: 24px;
+  font-size: 22pt;
+}
+h2 {
+  color: #0b5394;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 4px;
+  margin-top: 28px;
+  font-size: 16pt;
+}
+h3 { color: #1e3a8a; margin-top: 20px; font-size: 13pt; }
+h4 { color: #334155; margin-top: 16px; font-size: 11.5pt; }
+p { margin: 8px 0; text-align: justify; }
+code {
+  font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
+  background: #f1f5f9;
+  color: #be185d;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9.5pt;
+}
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 9pt;
+  line-height: 1.45;
+  page-break-inside: avoid;
+}
+pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}
+blockquote {
+  border-left: 4px solid #0ea5e9;
+  background: #e0f2fe;
+  margin: 12px 0;
+  padding: 8px 14px;
+  color: #0c4a6e;
+  font-style: italic;
+  border-radius: 0 4px 4px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 10pt;
+  page-break-inside: avoid;
+}
+th, td {
+  border: 1px solid #cbd5e1;
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: #e0e7ff;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+tr:nth-child(even) td { background: #f8fafc; }
+ul, ol { margin: 6px 0 10px 22px; }
+li { margin: 3px 0; }
+hr {
+  border: 0;
+  border-top: 2px dashed #cbd5e1;
+  margin: 24px 0;
+}
+a { color: #0b5394; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.header-banner {
+  background: linear-gradient(135deg, #0b5394 0%, #1e3a8a 100%);
+  color: #ffffff;
+  padding: 22px 26px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+.header-banner h1 {
+  color: #ffffff;
+  border: none;
+  margin: 0 0 4px 0;
+  font-size: 20pt;
+}
+.header-banner .sub {
+  color: #bfdbfe;
+  font-size: 11pt;
+}
+.footer-note {
+  margin-top: 36px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  color: #64748b;
+  font-size: 9pt;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<div class="header-banner">
+  <h1>TTF Natural Gas Options — User Manual</h1>
+  <div class="sub">Pricing Black-76 &amp; Bachelier &middot; Structures multi-legs &middot; Spread TTF/HH &middot; Dashboard React</div>
+</div>
+<h1 id="ttf-natural-gas-options-user-manual">TTF Natural Gas Options — User Manual</h1>
+<blockquote>
+<p>Written for gas traders and analysts familiar with TTF markets, but new to options pricing.</p>
+</blockquote>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-what-is-a-ttf-option">What Is a TTF Option?</a></li>
+<li><a href="#2-key-concepts-in-5-minutes">Key Concepts in 5 Minutes</a></li>
+<li><a href="#3-quick-start">Quick Start</a></li>
+<li><a href="#4-module-1--black-76--bachelier-pricing">Module 1 — Black-76 &amp; Bachelier Pricing (<code>black76_ttf.py</code>)</a></li>
+<li><a href="#5-module-2--option-structures">Module 2 — Option Structures (<code>structures_ttf.py</code>)</a></li>
+<li><a href="#6-module-3--ttfhh-spread-option">Module 3 — TTF/HH Spread Option (<code>ttf_hh_spread.py</code>)</a></li>
+<li><a href="#7-the-dashboard">The Dashboard</a></li>
+<li><a href="#8-glossary">Glossary</a></li>
+</ol>
+<hr />
+<h2 id="1-what-is-a-ttf-option">1. What Is a TTF Option?</h2>
+<p><strong>TTF</strong> (Title Transfer Facility) is the main European natural gas benchmark, traded on ICE and EEX. Prices are quoted in <strong>EUR/MWh</strong>, and the standard contract is a monthly futures (delivery of 1 MW of gas continuously for the entire delivery month).</p>
+<p>A <strong>TTF option</strong> gives you the <em>right, but not the obligation</em>, to buy or sell TTF gas at a pre-agreed price on a specific date.</p>
+<h3 id="call-vs-put-the-simple-version">Call vs Put — The Simple Version</h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>You get the right to…</th>
+<th>Profits when…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Call</strong></td>
+<td><strong>Buy</strong> gas at the strike price</td>
+<td>Gas price <strong>rises</strong> above the strike</td>
+</tr>
+<tr>
+<td><strong>Put</strong></td>
+<td><strong>Sell</strong> gas at the strike price</td>
+<td>Gas price <strong>falls</strong> below the strike</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Concrete example:</strong><br />
+You buy a <strong>Jun-26 Call, strike €35/MWh</strong>. If TTF for June-26 delivery is trading at €42/MWh at expiry, you can still buy at €35 — a gain of <strong>€7/MWh</strong>. If it's at €28/MWh, the option expires worthless (you simply don't exercise it). The most you lose is the <strong>premium</strong> you paid upfront.</p>
+<h3 id="ttf-options-expiry-convention-iceeex">TTF Options Expiry Convention (ICE/EEX)</h3>
+<ul>
+<li><strong>Futures expiry</strong>: last business day of the month <em>before</em> delivery.</li>
+<li><strong>Options expiry</strong>: <strong>5 business days before</strong> the futures expiry.</li>
+</ul>
+<p>Example for June-26 delivery:
+- Futures last trading day: <strong>29 May 2026</strong>
+- Options last trading day: <strong>22 May 2026</strong></p>
+<hr />
+<h2 id="2-key-concepts-in-5-minutes">2. Key Concepts in 5 Minutes</h2>
+<h3 id="the-5-inputs-to-any-option-price">The 5 Inputs to Any Option Price</h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Symbol</th>
+<th>What It Means</th>
+<th>Typical TTF Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Forward price</td>
+<td>F</td>
+<td>Current TTF futures price</td>
+<td>€30–45 / MWh</td>
+</tr>
+<tr>
+<td>Strike price</td>
+<td>K</td>
+<td>The fixed exercise price</td>
+<td>Near F (ATM)</td>
+</tr>
+<tr>
+<td>Time to expiry</td>
+<td>T</td>
+<td>Years until option expires</td>
+<td>0.08 – 2.0 y</td>
+</tr>
+<tr>
+<td>Risk-free rate</td>
+<td>r</td>
+<td>EUR overnight rate (€STR)</td>
+<td>2–4%</td>
+</tr>
+<tr>
+<td>Implied volatility</td>
+<td>σ</td>
+<td>Market's forecast of price movement</td>
+<td>40–80%</td>
+</tr>
+</tbody>
+</table>
+<h3 id="volatility-the-most-important-input">Volatility — The Most Important Input</h3>
+<p>Volatility (σ) measures how much the market <em>expects</em> gas prices to move. It is expressed as an annualised percentage:</p>
+<ul>
+<li><strong>σ = 50%</strong> means the market expects TTF to move roughly ±50% over the next year.</li>
+<li>Higher σ → more expensive options (both calls and puts).</li>
+<li>You <em>cannot</em> observe σ directly; it is <strong>implied</strong> from market option prices.</li>
+</ul>
+<h3 id="the-greeks-sensitivity-at-a-glance">The Greeks — Sensitivity at a Glance</h3>
+<table>
+<thead>
+<tr>
+<th>Greek</th>
+<th>What It Tells You</th>
+<th>Practical Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Delta (Δ)</strong></td>
+<td>€-change in option value per €1 move in forward</td>
+<td>Hedge ratio: delta = 0.50 means hedge half your position</td>
+</tr>
+<tr>
+<td><strong>Gamma (Γ)</strong></td>
+<td>How fast delta changes</td>
+<td>High gamma → option reacts non-linearly to price moves</td>
+</tr>
+<tr>
+<td><strong>Vega (ν)</strong></td>
+<td>€-change per 1% increase in implied vol</td>
+<td>Risk to vol moves; positive for long options</td>
+</tr>
+<tr>
+<td><strong>Theta (Θ)</strong></td>
+<td>Daily time decay (€/day, always negative for buyers)</td>
+<td>Cost of holding an option overnight</td>
+</tr>
+<tr>
+<td><strong>Rho (ρ)</strong></td>
+<td>Sensitivity to interest rate changes</td>
+<td>Small effect on short-dated TTF options</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-quick-start">3. Quick Start</h2>
+<h3 id="requirements">Requirements</h3>
+<pre><code class="language-bash">pip install scipy numpy pandas requests
+</code></pre>
+<h3 id="your-first-calculation">Your First Calculation</h3>
+<pre><code class="language-python">from black76_ttf import b76_call, b76_put, b76_greeks
+
+F     = 35.0   # EUR/MWh — TTF Jun-26 forward
+K     = 35.0   # EUR/MWh — at-the-money strike
+T     = 0.25   # years   — ~3 months to expiry
+r     = 0.03   # 3% EUR risk-free rate
+sigma = 0.50   # 50% implied volatility
+
+call = b76_call(F, K, T, r, sigma)
+put  = b76_put(F, K, T, r, sigma)
+
+print(f&quot;Call: {call:.2f} EUR/MWh&quot;)   # → 3.43 EUR/MWh
+print(f&quot;Put:  {put:.2f} EUR/MWh&quot;)    # → 3.17 EUR/MWh
+
+g = b76_greeks(F, K, T, r, sigma, &quot;call&quot;)
+print(f&quot;Delta: {g.delta:.2f}, Vega: {g.vega:.2f}, Theta: {g.theta:.4f}/day&quot;)
+</code></pre>
+<h3 id="using-contract-codes">Using Contract Codes</h3>
+<pre><code class="language-python">from black76_ttf import b76_price_ttf
+
+# Automatically calculates T from the ICE contract code
+price = b76_price_ttf(F=35.0, K=35.0, contract=&quot;TTFM26&quot;, r=0.03, sigma=0.50)
+price = b76_price_ttf(F=35.0, K=35.0, contract=&quot;Jun26&quot;,  r=0.03, sigma=0.50)
+</code></pre>
+<p>Accepted contract formats: <code>"TTFM26"</code>, <code>"Jun26"</code>, <code>"Jun2026"</code>.</p>
+<hr />
+<h2 id="4-module-1-black-76-bachelier-pricing">4. Module 1 — Black-76 &amp; Bachelier Pricing</h2>
+<p><strong>File:</strong> <code>black76_ttf.py</code></p>
+<h3 id="41-which-model-to-use">4.1 Which Model to Use?</h3>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Normal market conditions (F &gt; ~5 EUR/MWh)</td>
+<td><strong>Black-76</strong> (lognormal vol)</td>
+</tr>
+<tr>
+<td>Low or negative prices (crisis/glut scenarios)</td>
+<td><strong>Bachelier</strong> (normal vol)</td>
+</tr>
+<tr>
+<td>Market quotes are in "EUR/MWh vol" rather than "%"</td>
+<td><strong>Bachelier</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-black-76-pricing">4.2 Black-76 Pricing</h3>
+<p>The <strong>Black-76 model</strong> is the industry standard for options on energy futures. It assumes forward prices follow a lognormal distribution.</p>
+<h4 id="core-functions">Core Functions</h4>
+<pre><code class="language-python">from black76_ttf import b76_call, b76_put, b76_price
+
+# Vanilla call and put
+call = b76_call(F=35.0, K=33.0, T=0.5, r=0.03, sigma=0.45)
+put  = b76_put( F=35.0, K=37.0, T=0.5, r=0.03, sigma=0.48)
+
+# Generic function (call or put)
+price = b76_price(F=35.0, K=35.0, T=0.25, r=0.03, sigma=0.50, option_type=&quot;call&quot;)
+</code></pre>
+<h4 id="parameters">Parameters</h4>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Unit</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>F</code></td>
+<td>float</td>
+<td>EUR/MWh</td>
+<td>TTF forward price</td>
+</tr>
+<tr>
+<td><code>K</code></td>
+<td>float</td>
+<td>EUR/MWh</td>
+<td>Strike price</td>
+</tr>
+<tr>
+<td><code>T</code></td>
+<td>float</td>
+<td>years</td>
+<td>Time to expiry (today included)</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>float</td>
+<td>decimal</td>
+<td>Risk-free rate (0.03 = 3%)</td>
+</tr>
+<tr>
+<td><code>sigma</code></td>
+<td>float</td>
+<td>decimal</td>
+<td>Lognormal implied vol (0.50 = 50%)</td>
+</tr>
+<tr>
+<td><code>option_type</code></td>
+<td>str</td>
+<td>—</td>
+<td><code>"call"</code> or <code>"put"</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="pricing-with-contract-name">Pricing with Contract Name</h4>
+<pre><code class="language-python">from black76_ttf import b76_price_ttf, bach_price_ttf
+from datetime import date
+
+# T calculated automatically (options expiry, today included)
+price = b76_price_ttf(
+    F=35.0, K=35.0,
+    contract=&quot;TTFM26&quot;,     # or &quot;Jun26&quot;, &quot;Jun2026&quot;
+    r=0.03, sigma=0.50,
+    option_type=&quot;call&quot;,
+    reference=date(2026, 4, 21)   # optional, defaults to today
+)
+</code></pre>
+<h3 id="43-greeks">4.3 Greeks</h3>
+<pre><code class="language-python">from black76_ttf import b76_greeks, B76Greeks
+
+g = b76_greeks(F=35.0, K=35.0, T=0.25, r=0.03, sigma=0.50, option_type=&quot;call&quot;)
+
+print(f&quot;Delta : {g.delta:.4f}&quot;)   # fraction of forward movement
+print(f&quot;Gamma : {g.gamma:.6f}&quot;)   # delta change per EUR/MWh
+print(f&quot;Vega  : {g.vega:.4f}&quot;)    # EUR/MWh per 1-unit (100%) vol change
+print(f&quot;Theta : {g.theta:.4f}&quot;)   # EUR/MWh per calendar day
+print(f&quot;Vanna : {g.vanna:.6f}&quot;)   # mixed delta/vol sensitivity
+print(f&quot;Volga : {g.volga:.6f}&quot;)   # vol convexity
+</code></pre>
+<p><strong>Interpreting delta for hedging:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Delta</th>
+<th>Position Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.50</td>
+<td>At-the-money (ATM) call</td>
+</tr>
+<tr>
+<td>0.25</td>
+<td>25-delta call — moderately OTM</td>
+</tr>
+<tr>
+<td>0.10</td>
+<td>10-delta call — deep OTM, "wing"</td>
+</tr>
+<tr>
+<td>−0.50</td>
+<td>ATM put</td>
+</tr>
+</tbody>
+</table>
+<h3 id="44-implied-volatility">4.4 Implied Volatility</h3>
+<pre><code class="language-python">from black76_ttf import b76_implied_vol
+
+# You observe the market price of an option and solve for σ
+market_price = 3.50   # EUR/MWh
+
+iv = b76_implied_vol(
+    market_price=market_price,
+    F=35.0, K=35.0, T=0.25, r=0.03,
+    option_type=&quot;call&quot;
+)
+print(f&quot;Implied vol: {iv:.1%}&quot;)   # e.g. 51.3%
+</code></pre>
+<p>Raises <code>ValueError</code> if the price is below intrinsic value or outside the solvable range.</p>
+<h3 id="45-bachelier-model-normal-vol">4.5 Bachelier Model (Normal Vol)</h3>
+<p>Used when TTF prices approach zero or go negative (rare but possible during supply gluts).</p>
+<pre><code class="language-python">from black76_ttf import bach_call, bach_put, bach_greeks, bach_implied_vol
+
+# Normal vol is in EUR/MWh (absolute), NOT a percentage
+sigma_n = 8.0   # 8 EUR/MWh annual normal vol
+
+call = bach_call(F=5.0, K=5.0, T=0.25, r=0.03, sigma_n=sigma_n)
+iv_n = bach_implied_vol(market_price=1.20, F=5.0, K=5.0, T=0.25, r=0.03)
+</code></pre>
+<h3 id="46-expiry-calendar">4.6 Expiry Calendar</h3>
+<pre><code class="language-python">from black76_ttf import options_expiry_from_delivery, futures_expiry_from_delivery
+from black76_ttf import t_from_delivery, t_from_contract
+
+# Expiry dates
+opt_exp = options_expiry_from_delivery(2026, 6)   # → 2026-05-22
+fut_exp = futures_expiry_from_delivery(2026, 6)   # → 2026-05-29
+
+# Time to expiry in years (ACT/365, today included)
+T = t_from_delivery(2026, 6)
+T = t_from_contract(&quot;TTFM26&quot;)
+T = t_from_contract(&quot;Jun26&quot;)
+</code></pre>
+<hr />
+<h2 id="5-module-2-option-structures">5. Module 2 — Option Structures</h2>
+<p><strong>File:</strong> <code>structures_ttf.py</code></p>
+<p>Each structure combines two or more options to express a specific market view while managing cost and risk.</p>
+<h3 id="common-return-type">Common Return Type</h3>
+<p>Every function returns a <code>StructureResult</code> with:</p>
+<pre><code class="language-python">result.price        # net premium paid (+) or received (−) in EUR/MWh
+result.delta        # net delta
+result.gamma        # net gamma
+result.vega         # net vega
+result.theta        # net theta per day
+result.breakevens   # list of breakeven prices at expiry
+result.max_profit   # maximum gain (math.inf if unlimited)
+result.max_loss     # maximum loss (negative, −math.inf if unlimited)
+result.pnl_at_expiry  # list of (F_T, pnl) tuples for plotting
+</code></pre>
+<hr />
+<h3 id="structure-1-straddle">Structure 1 — Straddle</h3>
+<p><strong>View:</strong> "I don't know which way gas will move, but I expect a big move."<br />
+<strong>Cost:</strong> High (two premiums)  </p>
+<pre><code class="language-python">from structures_ttf import straddle
+
+s = straddle(F=35.0, K=35.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: ~6.86 EUR/MWh
+# Breakevens:  28.14 and 41.86 EUR/MWh
+# Max profit:  unlimited
+# Max loss:    −6.86 EUR/MWh (if F_T = K at expiry)
+</code></pre>
+<p><strong>P&amp;L at expiry:</strong> profit = |F_T − K| − premium</p>
+<hr />
+<h3 id="structure-2-strangle">Structure 2 — Strangle</h3>
+<p><strong>View:</strong> "I expect a big move but want to spend less than a straddle."<br />
+<strong>Cost:</strong> Lower than straddle (OTM options cheaper)</p>
+<pre><code class="language-python">from structures_ttf import strangle
+
+s = strangle(F=35.0, K_put=32.0, K_call=38.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: ~4.29 EUR/MWh
+# Profit zone: F_T &lt; 27.71 or F_T &gt; 42.29 EUR/MWh
+</code></pre>
+<p>You can pass per-leg vols to reflect the market smile:</p>
+<pre><code class="language-python">s = strangle(F=35.0, K_put=32.0, K_call=38.0, T=0.25, r=0.03, sigma=0.50,
+             sigma_put=0.55, sigma_call=0.45)
+</code></pre>
+<hr />
+<h3 id="structure-3-bull-call-spread">Structure 3 — Bull Call Spread</h3>
+<p><strong>View:</strong> "I'm bullish, but I want to reduce the cost of my call."<br />
+<strong>Cost:</strong> Low (partial debit)</p>
+<pre><code class="language-python">from structures_ttf import bull_call_spread
+
+s = bull_call_spread(F=35.0, K_lo=34.0, K_hi=38.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: ~1.62 EUR/MWh  (vs ~3.90 for naked call)
+# Max profit:  2.38 EUR/MWh at F_T ≥ 38
+# Max loss:    −1.62 EUR/MWh at F_T ≤ 34
+# Breakeven:   35.62 EUR/MWh
+</code></pre>
+<p><strong>Trade-off:</strong> You cap your profit at K_hi in exchange for a lower premium.</p>
+<hr />
+<h3 id="structure-4-bear-put-spread">Structure 4 — Bear Put Spread</h3>
+<p><strong>View:</strong> "I'm bearish, but I want to reduce the cost of my put."<br />
+<strong>Cost:</strong> Low (partial debit)</p>
+<pre><code class="language-python">from structures_ttf import bear_put_spread
+
+s = bear_put_spread(F=35.0, K_lo=32.0, K_hi=36.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: ~1.99 EUR/MWh
+# Max profit:  2.01 EUR/MWh at F_T ≤ 32
+# Max loss:    −1.99 EUR/MWh at F_T ≥ 36
+</code></pre>
+<hr />
+<h3 id="structure-5-butterfly">Structure 5 — Butterfly</h3>
+<p><strong>View:</strong> "I expect gas to stay close to current levels — low volatility."<br />
+<strong>Cost:</strong> Very low (small net debit)</p>
+<pre><code class="language-python">from structures_ttf import butterfly
+
+s = butterfly(F=35.0, K_lo=31.0, K_mid=35.0, K_hi=39.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: ~0.71 EUR/MWh
+# Max profit:  3.29 EUR/MWh at F_T = 35 (the middle strike)
+# Max loss:    −0.71 EUR/MWh if F_T ≤ 31 or F_T ≥ 39
+</code></pre>
+<p><strong>Analogy:</strong> You're selling a straddle but buying protection at the wings.</p>
+<hr />
+<h3 id="structure-6-condor">Structure 6 — Condor</h3>
+<p><strong>View:</strong> "I expect gas to trade in a range — wider than butterfly."<br />
+<strong>Cost:</strong> Slightly higher than butterfly</p>
+<pre><code class="language-python">from structures_ttf import condor
+
+s = condor(F=35.0, K1=30.0, K2=33.0, K3=37.0, K4=40.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: ~0.93 EUR/MWh
+# Max profit:  2.07 EUR/MWh when 33 ≤ F_T ≤ 37
+# Max loss:    −0.93 EUR/MWh if F_T ≤ 30 or F_T ≥ 40
+</code></pre>
+<hr />
+<h3 id="structure-7-collar">Structure 7 — Collar</h3>
+<p><strong>View:</strong> "I'm long physical gas or a futures contract and want to hedge downside cheaply."<br />
+<strong>Cost:</strong> Often near zero (put premium ≈ call premium received)</p>
+<pre><code class="language-python">from structures_ttf import collar
+
+s = collar(F=35.0, K_put=32.0, K_call=38.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: −0.28 EUR/MWh  (slight CREDIT)
+# Protects below 32 EUR/MWh
+# Gives up upside above 38 EUR/MWh
+</code></pre>
+<blockquote>
+<p><strong>Important:</strong> The <code>collar()</code> function prices the options overlay only. Add your futures P&amp;L <code>(F_T − F_entry)</code> to get the total hedged position P&amp;L.</p>
+</blockquote>
+<hr />
+<h3 id="structure-8-risk-reversal">Structure 8 — Risk Reversal</h3>
+<p><strong>View:</strong> "I'm directionally bullish and want upside exposure, partly funded by selling downside."<br />
+<strong>Cost:</strong> Near zero or small debit/credit depending on the vol skew</p>
+<pre><code class="language-python">from structures_ttf import risk_reversal
+
+s = risk_reversal(F=35.0, K_put=32.0, K_call=38.0, T=0.25, r=0.03, sigma=0.50)
+# Net premium: +0.28 EUR/MWh  (small debit)
+# Profits from upside moves above 38
+# Loses from downside moves below 32
+# Max profit / loss: unlimited on both sides
+</code></pre>
+<hr />
+<h3 id="structure-9-calendar-spread">Structure 9 — Calendar Spread</h3>
+<p><strong>View:</strong> "I think near-term vol is too high relative to longer-dated vol — buy long-dated, sell short-dated."<br />
+<strong>Cost:</strong> Small debit (far option costs more than near option)</p>
+<pre><code class="language-python">from structures_ttf import calendar_spread
+
+s = calendar_spread(
+    F=35.0, K=35.0,
+    T_far=180/365, T_near=90/365,
+    r=0.03, sigma=0.50
+)
+# Net premium: ~1.37 EUR/MWh
+# P&amp;L at near expiry depends on remaining time value of far option
+# Max profit near K at the near-term expiry date
+</code></pre>
+<p>You can also pass contract codes:</p>
+<pre><code class="language-python">s = calendar_spread(F=35.0, K=35.0, T_far=&quot;TTFU26&quot;, T_near=&quot;TTFM26&quot;, r=0.03, sigma=0.50)
+</code></pre>
+<hr />
+<h3 id="structure-10-ratio-spread">Structure 10 — Ratio Spread</h3>
+<p><strong>View:</strong> "I'm mildly bullish and want a cheap or zero-cost structure."<br />
+<strong>Caution:</strong> Unlimited loss if price rallies far above the short strike.</p>
+<pre><code class="language-python">from structures_ttf import ratio_spread
+
+s = ratio_spread(F=35.0, K_lo=35.0, K_hi=38.0, T=0.25, r=0.03, sigma=0.50, ratio=2)
+# Net premium: −1.14 EUR/MWh  (CREDIT received)
+# Max profit:  4.14 EUR/MWh at F_T = 38
+# Max loss:    unlimited if F_T &gt;&gt; 38  (you are short 2 calls vs long 1)
+</code></pre>
+<h3 id="displaying-results">Displaying Results</h3>
+<pre><code class="language-python">from structures_ttf import straddle, print_summary
+
+s = straddle(F=35.0, K=35.0, T=0.25, r=0.03, sigma=0.50)
+print_summary(s)
+
+# Plotting P&amp;L at expiry
+import matplotlib.pyplot as plt
+prices = [pt[0] for pt in s.pnl_at_expiry]
+pnls   = [pt[1] for pt in s.pnl_at_expiry]
+plt.plot(prices, pnls)
+plt.axhline(0, color='gray', linestyle='--')
+plt.xlabel(&quot;TTF at Expiry (EUR/MWh)&quot;)
+plt.ylabel(&quot;P&amp;L (EUR/MWh)&quot;)
+plt.title(&quot;Straddle P&amp;L at Expiry&quot;)
+plt.show()
+</code></pre>
+<hr />
+<h2 id="6-module-3-ttfhh-spread-option">6. Module 3 — TTF/HH Spread Option</h2>
+<p><strong>File:</strong> <code>ttf_hh_spread.py</code></p>
+<h3 id="61-the-ttf-henry-hub-basis">6.1 The TTF / Henry Hub Basis</h3>
+<p><strong>Henry Hub (HH)</strong> is the North American natural gas benchmark, quoted in <strong>USD/MMBtu</strong>.</p>
+<p>The TTF/HH basis measures the cost of shipping LNG from the US to Europe. When TTF is much higher than HH (converted to the same unit), it is profitable to export LNG from the US to Europe, and LNG tankers flow accordingly — compressing the spread over time.</p>
+<p><strong>Unit conversion:</strong></p>
+<pre><code>1 MWh = 3.412 MMBtu
+
+TTF (USD/MMBtu) = TTF (EUR/MWh) × EUR/USD rate ÷ 3.412
+</code></pre>
+<p>Example: TTF = 30 EUR/MWh, EUR/USD = 1.08<br />
+→ TTF = 30 × 1.08 ÷ 3.412 = <strong>9.50 USD/MMBtu</strong><br />
+→ Spread TTF − HH = 9.50 − 3.00 = <strong>6.50 USD/MMBtu</strong> (LNG arbitrage window open)</p>
+<h3 id="62-margrabes-model">6.2 Margrabe's Model</h3>
+<p>The spread option is priced using <strong>Margrabe's formula</strong> (1978), which values the option to exchange one asset for another:</p>
+<ul>
+<li><strong>Call:</strong> max(F_TTF_usd − F_HH, 0) — benefits if TTF stays above HH</li>
+<li><strong>Put:</strong>  max(F_HH − F_TTF_usd, 0) — benefits if HH closes the gap with TTF</li>
+</ul>
+<p>The key parameter is the <strong>spread volatility</strong>:</p>
+<pre><code>σ_spread = √(σ_TTF² + σ_HH² − 2ρ × σ_TTF × σ_HH)
+</code></pre>
+<p>Where <strong>ρ</strong> is the correlation between TTF and HH price movements.</p>
+<h3 id="63-pricing-a-spread-option">6.3 Pricing a Spread Option</h3>
+<pre><code class="language-python">from ttf_hh_spread import spread_price, print_summary
+
+result = spread_price(
+    F_ttf_eur = 30.0,    # TTF forward in EUR/MWh
+    F_hh      = 3.0,     # HH forward in USD/MMBtu
+    fx_eurusd = 1.08,    # EUR/USD rate
+    T         = 0.5,     # years to expiry
+    r_usd     = 0.045,   # USD risk-free rate
+    sigma_ttf = 0.60,    # TTF vol (60%)
+    sigma_hh  = 0.50,    # HH vol (50%)
+    rho       = 0.35,    # TTF/HH correlation
+    option_type = &quot;call&quot;
+)
+
+print(f&quot;Premium: {result.price:.4f} USD/MMBtu&quot;)
+print(f&quot;Premium: {result.price_eur:.4f} EUR/MWh&quot;)
+print_summary(result)
+</code></pre>
+<h3 id="64-reading-the-greeks">6.4 Reading the Greeks</h3>
+<table>
+<thead>
+<tr>
+<th>Greek</th>
+<th>Meaning</th>
+<th>Typical Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Δ_TTF</strong></td>
+<td>Change in option value per $1/MMBtu move in TTF</td>
+<td>0 to +1 (call)</td>
+</tr>
+<tr>
+<td><strong>Δ_HH</strong></td>
+<td>Change in option value per $1/MMBtu move in HH</td>
+<td>−1 to 0 (call)</td>
+</tr>
+<tr>
+<td><strong>Vega_TTF</strong></td>
+<td>Sensitivity to TTF vol</td>
+<td>Positive for long spread</td>
+</tr>
+<tr>
+<td><strong>Vega_HH</strong></td>
+<td>Sensitivity to HH vol</td>
+<td>Positive for long spread</td>
+</tr>
+<tr>
+<td><strong>Vega_ρ</strong></td>
+<td>Sensitivity to correlation</td>
+<td><strong>Negative</strong> — higher correlation = cheaper spread option</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key insight:</strong> If TTF and HH move perfectly together (ρ = 1), the spread never changes and the option is worth almost nothing. Lower correlation → more spread volatility → more expensive option.</p>
+</blockquote>
+<h3 id="65-implied-correlation">6.5 Implied Correlation</h3>
+<p>The implied correlation is the correlation ρ that, given observed vols, matches a market spread option price. It is the market's view of how linked the two markets are.</p>
+<pre><code class="language-python">from ttf_hh_spread import implied_correlation, ttf_eur_to_usd
+
+F_ttf_usd = ttf_eur_to_usd(30.0, fx_eurusd=1.08)   # 9.50 USD/MMBtu
+
+rho = implied_correlation(
+    market_price = 0.48,    # observed market price in USD/MMBtu
+    F_ttf        = F_ttf_usd,
+    F_hh         = 3.50,
+    T            = 0.5,
+    r            = 0.045,
+    sigma_ttf    = 0.60,
+    sigma_hh     = 0.50,
+    option_type  = &quot;call&quot;
+)
+print(f&quot;Implied correlation: {rho:.3f}&quot;)
+</code></pre>
+<h3 id="66-correlation-sensitivity-table">6.6 Correlation Sensitivity Table</h3>
+<pre><code class="language-python">from ttf_hh_spread import rho_sensitivity, ttf_eur_to_usd
+
+F_ttf_usd = ttf_eur_to_usd(30.0, 1.08)
+
+table = rho_sensitivity(F_ttf_usd, F_hh=3.0, T=0.5, r=0.045,
+                        sigma_ttf=0.60, sigma_hh=0.50)
+for rho, price in table:
+    print(f&quot;  ρ = {rho:+.1f}  →  {price:.4f} USD/MMBtu&quot;)
+</code></pre>
+<hr />
+<h2 id="7-the-dashboard">7. The Dashboard</h2>
+<p>The React dashboard is located in the <code>/dashboard</code> folder.</p>
+<h3 id="start-the-development-server">Start the Development Server</h3>
+<pre><code class="language-bash">cd dashboard
+npm install
+npm run dev
+# Opens at http://localhost:5173
+</code></pre>
+<h3 id="features">Features</h3>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>What It Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Pricer</strong></td>
+<td>Price a single call or put, view full Greeks</td>
+</tr>
+<tr>
+<td><strong>Vol Surface</strong></td>
+<td>3D implied vol surface across strikes and tenors</td>
+</tr>
+<tr>
+<td><strong>Greeks Chart</strong></td>
+<td>Delta, Gamma, Vega vs strike for Black-76 and Bachelier</td>
+</tr>
+<tr>
+<td><strong>Comparison</strong></td>
+<td>Side-by-side B76 vs Bachelier prices across strikes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="excel-export">Excel Export</h3>
+<p>Click <strong>Export to Excel</strong> in any tab to download a <code>.xlsx</code> file with prices and Greeks.</p>
+<hr />
+<h2 id="8-glossary">8. Glossary</h2>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ATM (At the Money)</strong></td>
+<td>Option whose strike equals the current forward price</td>
+</tr>
+<tr>
+<td><strong>Bachelier model</strong></td>
+<td>Normal-distribution option pricing model — handles negative prices</td>
+</tr>
+<tr>
+<td><strong>Basis</strong></td>
+<td>Price difference between two related markets (e.g. TTF − HH)</td>
+</tr>
+<tr>
+<td><strong>Black-76</strong></td>
+<td>Lognormal option pricing model for futures, standard in energy markets</td>
+</tr>
+<tr>
+<td><strong>Call option</strong></td>
+<td>Right to buy the underlying at the strike price</td>
+</tr>
+<tr>
+<td><strong>Delta (Δ)</strong></td>
+<td>Rate of change of option price with respect to the forward price</td>
+</tr>
+<tr>
+<td><strong>Expiry / Expiration</strong></td>
+<td>Date on which the option can last be exercised</td>
+</tr>
+<tr>
+<td><strong>Forward price (F)</strong></td>
+<td>Price agreed today for delivery at a future date</td>
+</tr>
+<tr>
+<td><strong>Gamma (Γ)</strong></td>
+<td>Rate of change of delta; acceleration of option value</td>
+</tr>
+<tr>
+<td><strong>Greeks</strong></td>
+<td>Collective name for option price sensitivities (Δ, Γ, ν, Θ, ρ)</td>
+</tr>
+<tr>
+<td><strong>Henry Hub (HH)</strong></td>
+<td>US natural gas benchmark at the Henry Hub, Louisiana; USD/MMBtu</td>
+</tr>
+<tr>
+<td><strong>Implied volatility</strong></td>
+<td>The vol that, plugged into the pricing model, reproduces the market price</td>
+</tr>
+<tr>
+<td><strong>Intrinsic value</strong></td>
+<td>max(F − K, 0) for a call; the in-the-money amount</td>
+</tr>
+<tr>
+<td><strong>ITM (In the Money)</strong></td>
+<td>Call with F &gt; K; put with K &gt; F — has positive intrinsic value</td>
+</tr>
+<tr>
+<td><strong>LNG</strong></td>
+<td>Liquefied Natural Gas — enables TTF/HH arbitrage via shipping</td>
+</tr>
+<tr>
+<td><strong>Lognormal</strong></td>
+<td>Statistical distribution used in Black-76; prices can't go negative</td>
+</tr>
+<tr>
+<td><strong>Margrabe model</strong></td>
+<td>Prices the option to exchange one asset for another (spread option)</td>
+</tr>
+<tr>
+<td><strong>MMBtu</strong></td>
+<td>Million British Thermal Units — US energy unit (1 MWh = 3.412 MMBtu)</td>
+</tr>
+<tr>
+<td><strong>MWh</strong></td>
+<td>Megawatt-hour — European energy unit for gas pricing</td>
+</tr>
+<tr>
+<td><strong>Normal distribution</strong></td>
+<td>Bell-curve distribution used in Bachelier model</td>
+</tr>
+<tr>
+<td><strong>OTM (Out of the Money)</strong></td>
+<td>Call with F &lt; K; put with K &gt; F — zero intrinsic value</td>
+</tr>
+<tr>
+<td><strong>Premium</strong></td>
+<td>Price paid to buy an option (upfront, non-refundable)</td>
+</tr>
+<tr>
+<td><strong>Put option</strong></td>
+<td>Right to sell the underlying at the strike price</td>
+</tr>
+<tr>
+<td><strong>Put-call parity</strong></td>
+<td>Mathematical relationship: C − P = e^(−rT)(F − K)</td>
+</tr>
+<tr>
+<td><strong>Rho (ρ)</strong></td>
+<td>Sensitivity of option price to interest rate changes</td>
+</tr>
+<tr>
+<td><strong>Risk Reversal</strong></td>
+<td>Long call + short put (or vice versa); directional structure</td>
+</tr>
+<tr>
+<td><strong>Spread option</strong></td>
+<td>Option on the difference between two asset prices</td>
+</tr>
+<tr>
+<td><strong>Strike (K)</strong></td>
+<td>The fixed price at which the option can be exercised</td>
+</tr>
+<tr>
+<td><strong>Theta (Θ)</strong></td>
+<td>Time decay — option value lost per calendar day</td>
+</tr>
+<tr>
+<td><strong>Time value</strong></td>
+<td>Option premium above intrinsic value; reflects uncertainty</td>
+</tr>
+<tr>
+<td><strong>TTF</strong></td>
+<td>Title Transfer Facility — European gas hub (Netherlands)</td>
+</tr>
+<tr>
+<td><strong>Vega (ν)</strong></td>
+<td>Sensitivity of option price to a change in implied volatility</td>
+</tr>
+<tr>
+<td><strong>Vol surface</strong></td>
+<td>Grid of implied vols across strikes and maturities</td>
+</tr>
+<tr>
+<td><strong>Volatility (σ)</strong></td>
+<td>Annualised measure of price uncertainty; key driver of option price</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Generated for the TTF Options Pricing project. All prices in EUR/MWh unless stated.</em></p>
+<div class="footer-note">
+  TTF Options Pricing Library &middot; Tous les prix sont indicatifs &middot; Document généré automatiquement depuis user_manual.md
+</div>
+</body>
+</html>
