@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TTF Options — User Manual</title>
+<title>TTF Options &mdash; User Manual</title>
 <style>
 @page { size: A4; margin: 18mm 15mm; }
 * { box-sizing: border-box; }
@@ -125,192 +125,190 @@ a:hover { text-decoration: underline; }
 </head>
 <body>
 <div class="header-banner">
-  <h1>TTF Natural Gas Options — User Manual</h1>
-  <div class="sub">Introduction &middot; Pricing Black-76 &amp; Bachelier &middot; Greeks &middot; Vol implicite &middot; Delta &rarr; strike</div>
+  <h1>TTF Natural Gas Options &mdash; User Manual</h1>
+  <div class="sub">Introduction &middot; Black-76 &amp; Bachelier pricing &middot; Greeks &middot; Implied vol &middot; Delta &rarr; strike</div>
 </div>
-<p>Ce manuel couvre :</p>
+<p>This manual covers:</p>
 <ol>
-<li><a href="#1-introduction">Introduction</a> — options TTF, Black-76 vs Bachelier, Greeks</li>
-<li><a href="#2-black76_ttfpy"><code>black76_ttf.py</code></a> — toutes les fonctions avec exemples chiffrés</li>
+<li><a href="#1-introduction">Introduction</a> — TTF options, Black-76 vs Bachelier, Greeks</li>
+<li><a href="#2-black76_ttfpy"><code>black76_ttf.py</code></a> — every function with worked examples</li>
 </ol>
 <blockquote>
-<p><strong>Conventions utilisées dans tous les exemples</strong></p>
-<ul>
-<li>Forward TTF : <code>F = 30 EUR/MWh</code></li>
-<li>Strikes : <code>25 / 28 / 30 / 32 / 35 EUR/MWh</code></li>
-<li>Volatilité Black-76 : <code>sigma = 0.50</code> (50 % lognormale)</li>
-<li>Volatilité Bachelier : <code>sigma_n = 15 EUR/MWh</code> (≈ <code>F · sigma</code>)</li>
-<li>Maturité : <code>T = 0.25</code> année (3 mois, ACT/365)</li>
-<li>Taux sans risque : <code>r = 0.02</code> (2 %)</li>
-</ul>
-<p>Les valeurs numériques affichées sont arrondies à 4 décimales.</p>
+<p><strong>Conventions used throughout the examples</strong>
+- TTF forward: <code>F = 30 EUR/MWh</code>
+- Strikes: <code>25 / 28 / 30 / 32 / 35 EUR/MWh</code>
+- Black-76 volatility: <code>sigma = 0.50</code> (50% lognormal)
+- Bachelier volatility: <code>sigma_n = 15 EUR/MWh</code> (≈ <code>F · sigma</code>)
+- Maturity: <code>T = 0.25</code> year (3 months, ACT/365)
+- Risk-free rate: <code>r = 0.02</code> (2%)</p>
+<p>Numerical values shown are rounded to 4 decimal places.</p>
 </blockquote>
 <hr>
 <h2 id="1-introduction">1. Introduction</h2>
-<h3 id="11-quest-ce-quune-option-ttf">1.1 Qu'est-ce qu'une option TTF ?</h3>
-<p>Le <strong>TTF</strong> (<em>Title Transfer Facility</em>) est le hub virtuel de gaz naturel des
-Pays-Bas et le benchmark européen. Une <strong>option TTF</strong> donne le droit (sans
-l'obligation) d'acheter (<code>call</code>) ou de vendre (<code>put</code>) un futures TTF à un
-prix d'exercice (<code>strike</code>, en EUR/MWh) à une date d'expiration donnée.</p>
+<h3 id="11-what-is-a-ttf-option">1.1 What is a TTF option?</h3>
+<p>The <strong>TTF</strong> (<em>Title Transfer Facility</em>) is the Dutch virtual natural gas hub
+and the European benchmark. A <strong>TTF option</strong> grants the right (without the
+obligation) to buy (<code>call</code>) or sell (<code>put</code>) a TTF futures contract at a given
+exercise price (<code>strike</code>, in EUR/MWh) on a given expiration date.</p>
 <ul>
-<li><strong>Sous-jacent</strong> : futures TTF (un contrat = livraison physique sur un mois donné).</li>
-<li><strong>Style</strong> : européen — exercice uniquement à l'expiration.</li>
-<li><strong>Quote</strong> : EUR/MWh (1 MWh = 3.4121 MMBtu).</li>
-<li><strong>Convention de jours</strong> : ACT/365 pour le temps <code>T</code> à l'expiration.</li>
-<li><strong>Calendrier</strong> : ICE Endex Dutch TTF — l'expiration de l'option tombe ~5 jours
-  calendaires avant le 1er du mois de livraison (rollback en jour ouvré, en
-  excluant les fériés NL+UK et le futures LTD).</li>
+<li><strong>Underlying</strong>: TTF futures (one contract = physical delivery over a given month).</li>
+<li><strong>Style</strong>: European — exercise only at expiry.</li>
+<li><strong>Quote</strong>: EUR/MWh (1 MWh = 3.4121 MMBtu).</li>
+<li><strong>Day-count</strong>: ACT/365 for the time <code>T</code> to expiry.</li>
+<li><strong>Calendar</strong>: ICE Endex Dutch TTF — option expiry falls ~5 calendar days
+  before the 1st of the delivery month (rolled back to a business day,
+  excluding NL+UK holidays and the futures LTD).</li>
 </ul>
 <h3 id="12-black-76-vs-bachelier">1.2 Black-76 vs Bachelier</h3>
-<p>Deux modèles d'évaluation sont implémentés ; le choix dépend du régime de prix.</p>
+<p>Two pricing models are implemented; the choice depends on the price regime.</p>
 <table>
 <thead>
 <tr>
-<th>Critère</th>
+<th>Criterion</th>
 <th>Black-76 (lognormal)</th>
 <th>Bachelier (normal)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Hypothèse</td>
+<td>Assumption</td>
 <td><code>dF / F = sigma · dW</code></td>
 <td><code>dF = sigma_n · dW</code></td>
 </tr>
 <tr>
-<td>Vol exprimée en</td>
-<td>décimal (<code>0.50</code> = 50 %)</td>
-<td>EUR/MWh absolu (<code>15</code> = 15 EUR/MWh)</td>
+<td>Vol expressed in</td>
+<td>decimal (<code>0.50</code> = 50%)</td>
+<td>absolute EUR/MWh (<code>15</code> = 15 EUR/MWh)</td>
 </tr>
 <tr>
-<td>Prix négatif autorisé</td>
-<td><strong>non</strong> (F doit être &gt; 0)</td>
-<td><strong>oui</strong></td>
+<td>Negative price allowed</td>
+<td><strong>no</strong> (F must be &gt; 0)</td>
+<td><strong>yes</strong></td>
 </tr>
 <tr>
-<td>Régime adapté</td>
-<td>conditions normales (F ≫ 0)</td>
-<td>crise / spreads (F faible ou &lt; 0)</td>
+<td>Suitable regime</td>
+<td>normal conditions (F ≫ 0)</td>
+<td>crisis / spreads (F low or &lt; 0)</td>
 </tr>
 <tr>
 <td>PCP</td>
 <td><code>C − P = e^(-rT)·(F − K)</code></td>
-<td>identique</td>
+<td>identical</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Règle de pouce</strong> : si <code>F &lt; 2 EUR/MWh</code> ou <code>F</code> peut devenir négatif (spreads,
-gaz sous-balancé), passer à Bachelier. Sinon, Black-76 est le standard.</p>
-<p>À l'ATM (<code>K = F</code>), les deux modèles donnent un prix très proche quand
+<p><strong>Rule of thumb</strong>: if <code>F &lt; 2 EUR/MWh</code> or <code>F</code> may go negative (spreads,
+under-balanced gas), switch to Bachelier. Otherwise, Black-76 is the standard.</p>
+<p>At ATM (<code>K = F</code>), both models yield very similar prices when
 <code>sigma_n ≈ F · sigma</code>.</p>
-<h3 id="13-les-greeks">1.3 Les Greeks</h3>
-<p>Sensibilités du prix de l'option par rapport aux paramètres d'entrée.</p>
+<h3 id="13-the-greeks">1.3 The Greeks</h3>
+<p>Sensitivities of the option price with respect to the input parameters.</p>
 <table>
 <thead>
 <tr>
 <th>Greek</th>
-<th>Définition</th>
-<th>Unité</th>
-<th>Convention ici</th>
+<th>Definition</th>
+<th>Unit</th>
+<th>Convention used here</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><strong>Delta</strong> Δ</td>
 <td><code>∂V / ∂F</code></td>
-<td>sans dimension</td>
-<td>actualisé par <code>e^(-rT)</code></td>
+<td>dimensionless</td>
+<td>discounted by <code>e^(-rT)</code></td>
 </tr>
 <tr>
 <td><strong>Gamma</strong> Γ</td>
 <td><code>∂²V / ∂F²</code></td>
-<td>par EUR/MWh</td>
-<td>identique call/put</td>
+<td>per EUR/MWh</td>
+<td>identical for call/put</td>
 </tr>
 <tr>
 <td><strong>Vega</strong> ν</td>
 <td><code>∂V / ∂σ</code></td>
-<td>EUR/MWh par unité de vol</td>
-<td>par 1.00 (100 %) de vol</td>
+<td>EUR/MWh per unit of vol</td>
+<td>per 1.00 (100%) of vol</td>
 </tr>
 <tr>
 <td><strong>Theta</strong> Θ</td>
 <td><code>∂V / ∂t</code></td>
-<td>EUR/MWh par jour</td>
-<td>par jour calendaire (négatif si long)</td>
+<td>EUR/MWh per day</td>
+<td>per calendar day (negative if long)</td>
 </tr>
 <tr>
 <td><strong>Rho</strong> ρ</td>
 <td><code>∂V / ∂r</code></td>
-<td>EUR/MWh par 1 pp</td>
-<td>par point de pourcentage</td>
+<td>EUR/MWh per 1 pp</td>
+<td>per percentage point</td>
 </tr>
 <tr>
 <td><strong>Vanna</strong></td>
 <td><code>∂Δ / ∂σ</code></td>
 <td>mixed</td>
-<td>dérivée croisée</td>
+<td>cross derivative</td>
 </tr>
 <tr>
 <td><strong>Volga</strong></td>
 <td><code>∂²V / ∂σ²</code></td>
 <td>EUR/MWh</td>
-<td>convexité de la vol</td>
+<td>vol convexity</td>
 </tr>
 </tbody>
 </table>
-<p>Convention pratique :</p>
+<p>Practical conventions:</p>
 <ul>
-<li><code>Δ_call − Δ_put = e^(-rT)</code> (parité forward des deltas).</li>
-<li><code>Γ</code>, <code>ν</code> sont identiques pour call et put dans Black-76 et Bachelier.</li>
-<li><code>Θ</code> ici est divisé par 365 → <strong>par jour</strong>, pas par année.</li>
-<li><code>ρ</code> ici est divisé par 100 → par <strong>point de pourcentage</strong> de variation du taux.</li>
+<li><code>Δ_call − Δ_put = e^(-rT)</code> (forward delta parity).</li>
+<li><code>Γ</code>, <code>ν</code> are identical for call and put under both Black-76 and Bachelier.</li>
+<li><code>Θ</code> here is divided by 365 → <strong>per day</strong>, not per year.</li>
+<li><code>ρ</code> here is divided by 100 → per <strong>percentage point</strong> of rate change.</li>
 </ul>
 <hr>
 <h2 id="2-black76_ttfpy">2. <code>black76_ttf.py</code></h2>
-<p>Module unique, sans dépendance externe au-delà de <code>scipy.stats.norm</code> et
-<code>scipy.optimize.brentq</code>. Couvre :</p>
+<p>A single module, with no external dependency beyond <code>scipy.stats.norm</code> and
+<code>scipy.optimize.brentq</code>. It covers:</p>
 <ul>
-<li>Le calendrier d'expiration ICE Endex Dutch TTF</li>
-<li>Les helpers de temps à l'expiration (<code>T</code> en années, ACT/365)</li>
-<li>Un parser de codes contrat (<code>TTFM26</code>, <code>Jun26</code>, …)</li>
-<li>Le pricing <strong>Black-76</strong> et <strong>Bachelier</strong> (call / put / dispatch)</li>
-<li>Les Greeks complets (Δ, Γ, ν, Θ, ρ, vanna, volga) pour les deux modèles</li>
-<li>Les solveurs de <strong>vol implicite</strong> (Brent)</li>
-<li>L'inversion <strong>delta → strike</strong></li>
+<li>The ICE Endex Dutch TTF expiry calendar</li>
+<li>Time-to-expiry helpers (<code>T</code> in years, ACT/365)</li>
+<li>A contract code parser (<code>TTFM26</code>, <code>Jun26</code>, …)</li>
+<li><strong>Black-76</strong> and <strong>Bachelier</strong> pricing (call / put / dispatcher)</li>
+<li>The full set of Greeks (Δ, Γ, ν, Θ, ρ, vanna, volga) for both models</li>
+<li><strong>Implied volatility</strong> solvers (Brent)</li>
+<li><strong>Delta → strike</strong> inversion</li>
 </ul>
-<h3 id="21-calendrier-dexpiration-ice-endex">2.1 Calendrier d'expiration ICE Endex</h3>
+<h3 id="21-ice-endex-expiry-calendar">2.1 ICE Endex expiry calendar</h3>
 <h4 id="ttf_expiry_datecontract_month-int-contract_year-int-date"><code>ttf_expiry_date(contract_month: int, contract_year: int) -&gt; date</code></h4>
-<p>Date officielle d'expiration de l'option TTF pour un mois de livraison donné.</p>
+<p>Official TTF option expiry date for a given delivery month.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import ttf_expiry_date
 
-ttf_expiry_date(6, 2026)   # TTFM26 : livraison juin 2026
+ttf_expiry_date(6, 2026)   # TTFM26: June 2026 delivery
 # -&gt; date(2026, 5, 27)
 
-ttf_expiry_date(1, 2026)   # TTFF26 : Dec-25 férié decale a Dec 24
+ttf_expiry_date(1, 2026)   # TTFF26: Dec-25 holiday shifts to Dec 24
 # -&gt; date(2025, 12, 24)
 
-ttf_expiry_date(3, 2026)   # TTFH26 : livraison mars 2026
+ttf_expiry_date(3, 2026)   # TTFH26: March 2026 delivery
 # -&gt; date(2026, 2, 24)
 </code></pre>
-<p><strong>Algorithme</strong> :</p>
+<p><strong>Algorithm</strong>:</p>
 <ol>
-<li>Candidat = 1er du mois de livraison − 5 jours calendaires</li>
-<li>Si non ouvré → recul au jour ouvré précédent (NL + UK)</li>
-<li>Si égal au futures LTD → recul d'un jour ouvré supplémentaire</li>
+<li>Candidate = 1st of delivery month − 5 calendar days</li>
+<li>If not a business day → roll back to the previous business day (NL + UK)</li>
+<li>If equal to the futures LTD → roll back one additional business day</li>
 </ol>
 <h4 id="ttf_time_to_expirycontract_month-contract_year-referencenone-float"><code>ttf_time_to_expiry(contract_month, contract_year, reference=None) -&gt; float</code></h4>
-<p>Temps <code>T</code> (années, ACT/365, jour de référence inclus). Retourne 0 si l'expiration
-est dans le passé.</p>
+<p>Time <code>T</code> (years, ACT/365, including the reference day). Returns 0 if expiry
+lies in the past.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import ttf_time_to_expiry
 
 ttf_time_to_expiry(6, 2026, reference=date(2026, 4, 23))
-# -&gt; 0.0959  (35 jours / 365)
+# -&gt; 0.0959  (35 days / 365)
 </code></pre>
 <h4 id="ttf_next_expiriesn6-referencenone-listtuplestr-date"><code>ttf_next_expiries(n=6, reference=None) -&gt; list[tuple[str, date]]</code></h4>
-<p>Les <code>n</code> prochaines expirations TTF (codes ICE + dates), triées en ascendant.</p>
+<p>The next <code>n</code> TTF expiries (ICE codes + dates), sorted ascending.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import ttf_next_expiries
 
@@ -320,8 +318,8 @@ ttf_next_expiries(3, reference=date(2026, 4, 23))
 #     ('TTFN26', date(2026, 6, 26))]
 </code></pre>
 <h4 id="ttf_is_business_dayd-date-bool"><code>ttf_is_business_day(d: date) -&gt; bool</code></h4>
-<p>Jour ouvré ICE Endex (Mon–Fri, hors <code>_ttf_holidays(year)</code> = NL+UK : 1er janvier,
-Vendredi saint, lundi de Pâques, 1er mai, 25 et 26 décembre).</p>
+<p>ICE Endex business day (Mon–Fri, excluding <code>_ttf_holidays(year)</code> = NL+UK:
+1 January, Good Friday, Easter Monday, 1 May, 25 and 26 December).</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import ttf_is_business_day
 
@@ -330,43 +328,43 @@ ttf_is_business_day(date(2025, 12, 25))   # Christmas
 ttf_is_business_day(date(2026, 4, 6))     # Easter Monday
 # -&gt; False
 </code></pre>
-<h3 id="22-helpers-dexpiration-simples-5-jours-ouvres-avant-le-futures-ltd">2.2 Helpers d'expiration "simples" (5 jours ouvrés avant le futures LTD)</h3>
-<p>Coexistent avec le calendrier ICE pour la rétrocompatibilité. Les fonctions
-<code>b76_price_ttf</code> / <code>bach_price_ttf</code> les utilisent via <code>t_from_contract</code>.</p>
+<h3 id="22-simple-expiry-helpers-5-business-days-before-the-futures-ltd">2.2 "Simple" expiry helpers (5 business days before the futures LTD)</h3>
+<p>These coexist with the ICE calendar for backward compatibility. The functions
+<code>b76_price_ttf</code> / <code>bach_price_ttf</code> use them via <code>t_from_contract</code>.</p>
 <h4 id="futures_expiry_from_deliverydelivery_year-delivery_month-date"><code>futures_expiry_from_delivery(delivery_year, delivery_month) -&gt; date</code></h4>
-<p>Dernier jour ouvré du mois précédant la livraison.</p>
+<p>Last business day of the month preceding delivery.</p>
 <pre><code class="language-python">from black76_ttf import futures_expiry_from_delivery
 
 futures_expiry_from_delivery(2026, 6)
-# -&gt; date(2026, 5, 29)   (vendredi)
+# -&gt; date(2026, 5, 29)   (Friday)
 </code></pre>
 <h4 id="options_expiry_from_deliverydelivery_year-delivery_month-date"><code>options_expiry_from_delivery(delivery_year, delivery_month) -&gt; date</code></h4>
-<p>5 jours ouvrés avant le futures LTD.</p>
+<p>5 business days before the futures LTD.</p>
 <pre><code class="language-python">from black76_ttf import options_expiry_from_delivery
 
 options_expiry_from_delivery(2026, 6)
 # -&gt; date(2026, 5, 22)
 </code></pre>
 <h4 id="t_from_deliverydelivery_year-delivery_month-referencenone-float"><code>t_from_delivery(delivery_year, delivery_month, reference=None) -&gt; float</code></h4>
-<p>Temps <code>T</code> ACT/365 jusqu'à <code>options_expiry_from_delivery</code>.</p>
+<p>Time <code>T</code> (ACT/365) up to <code>options_expiry_from_delivery</code>.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import t_from_delivery
 
 t_from_delivery(2026, 6, reference=date(2026, 4, 1))
-# -&gt; 0.1425  (52 jours / 365)
+# -&gt; 0.1425  (52 days / 365)
 </code></pre>
 <h4 id="t_futures_from_deliverydelivery_year-delivery_month-referencenone-float"><code>t_futures_from_delivery(delivery_year, delivery_month, reference=None) -&gt; float</code></h4>
-<p>Idem mais jusqu'au futures LTD.</p>
+<p>Same as above but up to the futures LTD.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import t_futures_from_delivery
 
 t_futures_from_delivery(2026, 6, reference=date(2026, 4, 1))
-# -&gt; 0.1616  (59 jours / 365)
+# -&gt; 0.1616  (59 days / 365)
 </code></pre>
-<h3 id="23-parser-de-code-contrat">2.3 Parser de code contrat</h3>
+<h3 id="23-contract-code-parser">2.3 Contract code parser</h3>
 <h4 id="t_from_contractcontract-str-referencenone-float"><code>t_from_contract(contract: str, reference=None) -&gt; float</code></h4>
-<p>Accepte le code ICE (<code>TTFH26</code>) ou l'abréviation mensuelle (<code>Mar26</code>, <code>Mar2026</code>)
-et renvoie <code>T</code> via <code>t_from_delivery</code>.</p>
+<p>Accepts the ICE code (<code>TTFH26</code>) or the monthly abbreviation (<code>Mar26</code>, <code>Mar2026</code>)
+and returns <code>T</code> via <code>t_from_delivery</code>.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import t_from_contract
 
@@ -377,44 +375,44 @@ t_from_contract(&quot;Jun26&quot;,  reference=date(2026, 4, 1))
 t_from_contract(&quot;Mar2026&quot;, reference=date(2026, 1, 15))
 # -&gt; 0.1233
 </code></pre>
-<p>Lève <code>ValueError</code> si le format n'est pas reconnu.</p>
-<h3 id="24-pricing-black-76">2.4 Pricing Black-76</h3>
-<p>Codes de mois ICE supportés : <code>F G H J K M N Q U V X Z</code>.</p>
+<p>Raises <code>ValueError</code> if the format is not recognized.</p>
+<h3 id="24-black-76-pricing">2.4 Black-76 pricing</h3>
+<p>Supported ICE month codes: <code>F G H J K M N Q U V X Z</code>.</p>
 <h4 id="b76_callf-k-t-r-sigma-float"><code>b76_call(F, K, T, r, sigma) -&gt; float</code></h4>
 <pre><code class="language-python">from black76_ttf import b76_call
 
 b76_call(F=30, K=30, T=0.25, r=0.02, sigma=0.50)
-# -&gt; 2.9670   EUR/MWh   (call ATM, 3 mois)
+# -&gt; 2.9670   EUR/MWh   (ATM call, 3 months)
 
 b76_call(F=30, K=25, T=0.25, r=0.02, sigma=0.50)
-# -&gt; 6.4124   EUR/MWh   (call ITM)
+# -&gt; 6.4124   EUR/MWh   (ITM call)
 
 b76_call(F=30, K=35, T=0.25, r=0.02, sigma=0.50)
-# -&gt; 1.2197   EUR/MWh   (call OTM)
+# -&gt; 1.2197   EUR/MWh   (OTM call)
 </code></pre>
 <h4 id="b76_putf-k-t-r-sigma-float"><code>b76_put(F, K, T, r, sigma) -&gt; float</code></h4>
 <pre><code class="language-python">from black76_ttf import b76_put
 
 b76_put(F=30, K=30, T=0.25, r=0.02, sigma=0.50)
-# -&gt; 2.9670   EUR/MWh   (put ATM, 3 mois)
+# -&gt; 2.9670   EUR/MWh   (ATM put, 3 months)
 
 b76_put(F=30, K=35, T=0.25, r=0.02, sigma=0.50)
-# -&gt; 6.1448   EUR/MWh   (put ITM)
+# -&gt; 6.1448   EUR/MWh   (ITM put)
 </code></pre>
 <blockquote>
-<p><strong>Vérification PCP</strong> : pour <code>K = 35</code>, <code>C − P = 1.2197 − 6.1448 = −4.9251</code>
-alors que <code>e^(-0.02·0.25)·(30 − 35) = −4.9750</code>. Diff exacte → PCP respectée.</p>
+<p><strong>PCP check</strong>: for <code>K = 35</code>, <code>C − P = 1.2197 − 6.1448 = −4.9251</code>
+while <code>e^(-0.02·0.25)·(30 − 35) = −4.9750</code>. Exact difference → PCP holds.</p>
 </blockquote>
 <h4 id="b76_pricef-k-t-r-sigma-option_typecall-float"><code>b76_price(F, K, T, r, sigma, option_type='call') -&gt; float</code></h4>
-<p>Dispatcher générique :</p>
+<p>Generic dispatcher:</p>
 <pre><code class="language-python">from black76_ttf import b76_price
 
 b76_price(30, 30, 0.25, 0.02, 0.50, &quot;call&quot;)   # -&gt; 2.9670
 b76_price(30, 30, 0.25, 0.02, 0.50, &quot;put&quot;)    # -&gt; 2.9670
 </code></pre>
-<p>Lève <code>ValueError</code> si <code>option_type</code> ∉ <code>{'call', 'put'}</code>.</p>
+<p>Raises <code>ValueError</code> if <code>option_type</code> ∉ <code>{'call', 'put'}</code>.</p>
 <h4 id="b76_price_ttff-k-contract-r-sigma-option_typecall-referencenone-float"><code>b76_price_ttf(F, K, contract, r, sigma, option_type='call', reference=None) -&gt; float</code></h4>
-<p>Variante où <code>T</code> est dérivé d'un code contrat.</p>
+<p>Variant where <code>T</code> is derived from a contract code.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import b76_price_ttf
 
@@ -424,8 +422,8 @@ b76_price_ttf(F=30, K=30, contract=&quot;TTFM26&quot;,
               reference=date(2026, 4, 1))
 # -&gt; 2.2530   EUR/MWh   (T = 52 / 365 = 0.1425)
 </code></pre>
-<h3 id="25-pricing-bachelier">2.5 Pricing Bachelier</h3>
-<p>Pour les forwards proches de zéro ou négatifs, ou les spreads.</p>
+<h3 id="25-bachelier-pricing">2.5 Bachelier pricing</h3>
+<p>For forwards close to zero or negative, or for spreads.</p>
 <h4 id="bach_callf-k-t-r-sigma_n-float"><code>bach_call(F, K, T, r, sigma_n) -&gt; float</code></h4>
 <pre><code class="language-python">from black76_ttf import bach_call
 
@@ -433,7 +431,7 @@ bach_call(F=30, K=30, T=0.25, r=0.02, sigma_n=15)
 # -&gt; 2.9770   EUR/MWh
 
 bach_call(F=-3, K=0, T=60/365, r=0.02, sigma_n=6)
-# -&gt; 0.5860   EUR/MWh   (forward negatif, scenario crise)
+# -&gt; 0.5860   EUR/MWh   (negative forward, crisis scenario)
 </code></pre>
 <h4 id="bach_putf-k-t-r-sigma_n-float"><code>bach_put(F, K, T, r, sigma_n) -&gt; float</code></h4>
 <pre><code class="language-python">from black76_ttf import bach_put
@@ -449,7 +447,7 @@ bach_price(30, 35, 0.25, 0.02, 15, &quot;put&quot;)
 # -&gt; 7.6770
 </code></pre>
 <h4 id="bach_price_ttff-k-contract-r-sigma_n-option_typecall-referencenone-float"><code>bach_price_ttf(F, K, contract, r, sigma_n, option_type='call', reference=None) -&gt; float</code></h4>
-<p>Idem <code>b76_price_ttf</code> mais via Bachelier.</p>
+<p>Same as <code>b76_price_ttf</code> but using Bachelier.</p>
 <pre><code class="language-python">from datetime import date
 from black76_ttf import bach_price_ttf
 
@@ -459,10 +457,10 @@ bach_price_ttf(F=30, K=30, contract=&quot;Jun26&quot;,
                reference=date(2026, 4, 1))
 # -&gt; 2.2519
 </code></pre>
-<h3 id="26-greeks-black-76">2.6 Greeks Black-76</h3>
-<p>Toutes les fonctions ci-dessous prennent <code>(F, K, T, r, sigma, option_type='call')</code>
-sauf <code>b76_gamma</code>, <code>b76_vega</code>, <code>b76_vanna</code>, <code>b76_volga</code> qui sont identiques pour
-call et put (pas d'argument <code>option_type</code>).</p>
+<h3 id="26-black-76-greeks">2.6 Black-76 Greeks</h3>
+<p>All the functions below take <code>(F, K, T, r, sigma, option_type='call')</code> except
+<code>b76_gamma</code>, <code>b76_vega</code>, <code>b76_vanna</code>, <code>b76_volga</code> which are identical for call
+and put (no <code>option_type</code> argument).</p>
 <pre><code class="language-python">from black76_ttf import (
     b76_delta, b76_gamma, b76_vega, b76_theta, b76_rho,
     b76_vanna, b76_volga, b76_greeks,
@@ -473,14 +471,14 @@ F, K, T, r, sigma = 30, 30, 0.25, 0.02, 0.50
 b76_delta(F, K, T, r, sigma, &quot;call&quot;)   # -&gt; +0.5470
 b76_delta(F, K, T, r, sigma, &quot;put&quot;)    # -&gt; -0.4480
 b76_gamma(F, K, T, r, sigma)           # -&gt; +0.0525
-b76_vega (F, K, T, r, sigma)           # -&gt; +5.9069   (par 1.00 de vol)
-b76_theta(F, K, T, r, sigma, &quot;call&quot;)   # -&gt; -0.0245   (par jour)
-b76_rho  (F, K, T, r, sigma, &quot;call&quot;)   # -&gt; -0.0074   (par 1 pp)
+b76_vega (F, K, T, r, sigma)           # -&gt; +5.9069   (per 1.00 of vol)
+b76_theta(F, K, T, r, sigma, &quot;call&quot;)   # -&gt; -0.0245   (per day)
+b76_rho  (F, K, T, r, sigma, &quot;call&quot;)   # -&gt; -0.0074   (per 1 pp)
 b76_vanna(F, K, T, r, sigma)           # -&gt; +0.0984
 b76_volga(F, K, T, r, sigma)           # -&gt; -0.1846
 </code></pre>
 <h4 id="b76_greeksf-k-t-r-sigma-option_typecall-b76greeks"><code>b76_greeks(F, K, T, r, sigma, option_type='call') -&gt; B76Greeks</code></h4>
-<p>Tous les Greeks en un seul appel (dataclass <code>B76Greeks</code> avec champs <code>delta</code>,
+<p>All the Greeks in a single call (<code>B76Greeks</code> dataclass with fields <code>delta</code>,
 <code>gamma</code>, <code>vega</code>, <code>theta</code>, <code>rho</code>, <code>vanna</code>, <code>volga</code>).</p>
 <pre><code class="language-python">g = b76_greeks(F=30, K=30, T=0.25, r=0.02, sigma=0.50, option_type=&quot;call&quot;)
 g.delta   # +0.5470
@@ -492,13 +490,13 @@ g.vanna   # +0.0984
 g.volga   # -0.1846
 </code></pre>
 <blockquote>
-<p><strong>Convention vega</strong> : par unité de vol décimale (1.00 = 100 %). Pour la
-sensibilité "par 1 vol point" (1 % = 0.01), divisez vega par 100.</p>
-<p><strong>Convention rho</strong> : déjà divisé par 100, donc directement en EUR/MWh par
-point de pourcentage de variation du taux.</p>
+<p><strong>Vega convention</strong>: per unit of decimal vol (1.00 = 100%). For the "per 1
+vol point" sensitivity (1% = 0.01), divide vega by 100.</p>
+<p><strong>Rho convention</strong>: already divided by 100, so directly in EUR/MWh per
+percentage point of rate change.</p>
 </blockquote>
-<h3 id="27-greeks-bachelier">2.7 Greeks Bachelier</h3>
-<p>Mêmes signatures, avec <code>sigma_n</code> à la place de <code>sigma</code>.</p>
+<h3 id="27-bachelier-greeks">2.7 Bachelier Greeks</h3>
+<p>Same signatures, with <code>sigma_n</code> instead of <code>sigma</code>.</p>
 <pre><code class="language-python">from black76_ttf import (
     bach_delta, bach_gamma, bach_vega, bach_theta, bach_rho,
     bach_vanna, bach_volga, bach_greeks,
@@ -516,54 +514,54 @@ bach_vanna(F, K, T, r, sigma_n)           # 0.0
 bach_volga(F, K, T, r, sigma_n)           # -0.0132
 </code></pre>
 <blockquote>
-<p>À l'ATM Bachelier, <code>vanna = 0</code> exactement (par symétrie en <code>d = (F-K)/(σ√T)</code>).</p>
+<p>At ATM under Bachelier, <code>vanna = 0</code> exactly (by symmetry in <code>d = (F-K)/(σ√T)</code>).</p>
 </blockquote>
 <h4 id="bach_greeks-bachgreeks"><code>bach_greeks(...) -&gt; BachGreeks</code></h4>
 <pre><code class="language-python">g = bach_greeks(30, 30, 0.25, 0.02, 15, &quot;call&quot;)
 g.delta, g.gamma, g.vega, g.theta, g.rho, g.vanna, g.volga
 # (0.4975, 0.0530, 0.1985, -0.0246, -0.0074, 0.0, -0.0132)
 </code></pre>
-<h3 id="28-solveurs-de-volatilite-implicite">2.8 Solveurs de volatilité implicite</h3>
-<p>Méthode de <strong>Brent</strong>, <code>xtol = 1e-8</code>, max 300 itérations.</p>
+<h3 id="28-implied-volatility-solvers">2.8 Implied volatility solvers</h3>
+<p><strong>Brent</strong> method, <code>xtol = 1e-8</code>, max 300 iterations.</p>
 <h4 id="b76_implied_volmarket_price-f-k-t-r-option_typecall-sigma_lo1e-6-sigma_hi200-float"><code>b76_implied_vol(market_price, F, K, T, r, option_type='call', sigma_lo=1e-6, sigma_hi=20.0) -&gt; float</code></h4>
-<p>Round-trip price → IV → sigma :</p>
+<p>Round-trip price → IV → sigma:</p>
 <pre><code class="language-python">from black76_ttf import b76_call, b76_implied_vol
 
 p = b76_call(30, 30, 0.25, 0.02, 0.50)   # 2.9670
 b76_implied_vol(p, F=30, K=30, T=0.25, r=0.02, option_type=&quot;call&quot;)
 # -&gt; 0.5000
 </code></pre>
-<p>Lève <code>ValueError</code> si <code>market_price</code> est en dehors du couloir
-<code>[intrinsic, sigma_hi]</code>.</p>
+<p>Raises <code>ValueError</code> if <code>market_price</code> falls outside the
+<code>[intrinsic, sigma_hi]</code> corridor.</p>
 <h4 id="bach_implied_volmarket_price-f-k-t-r-option_typecall-sigma_lo1e-6-sigma_hi5000-float"><code>bach_implied_vol(market_price, F, K, T, r, option_type='call', sigma_lo=1e-6, sigma_hi=500.0) -&gt; float</code></h4>
-<p>Inverse pour la vol normale en EUR/MWh.</p>
+<p>Inverse for the normal vol in EUR/MWh.</p>
 <pre><code class="language-python">from black76_ttf import bach_call, bach_implied_vol
 
 p = bach_call(30, 30, 0.25, 0.02, 15)   # 2.9770
 bach_implied_vol(p, F=30, K=30, T=0.25, r=0.02, option_type=&quot;call&quot;)
 # -&gt; 15.0000
 </code></pre>
-<h3 id="29-inversion-delta-strike">2.9 Inversion delta → strike</h3>
-<p>Utile pour convertir une cotation 25Δ / 50Δ / 75Δ en strike.</p>
+<h3 id="29-delta-strike-inversion">2.9 Delta → strike inversion</h3>
+<p>Useful for converting a 25Δ / 50Δ / 75Δ quote into a strike.</p>
 <h4 id="b76_delta_to_strikedelta_target-f-t-r-sigma-option_typecall-k_lonone-k_hinone-float"><code>b76_delta_to_strike(delta_target, F, T, r, sigma, option_type='call', K_lo=None, K_hi=None) -&gt; float</code></h4>
 <pre><code class="language-python">from black76_ttf import b76_delta_to_strike
 
-# Strike du call 25-delta (typiquement OTM)
+# Strike of the 25-delta call (typically OTM)
 b76_delta_to_strike(delta_target=0.25,
                     F=30, T=0.25, r=0.02, sigma=0.50,
                     option_type=&quot;call&quot;)
 # -&gt; 35.0826   EUR/MWh
 
-# Strike du put 25-delta (le delta cible est negatif pour un put)
+# Strike of the 25-delta put (the target delta is negative for a put)
 b76_delta_to_strike(delta_target=-0.25,
                     F=30, T=0.25, r=0.02, sigma=0.50,
                     option_type=&quot;put&quot;)
 # -&gt; 25.5749   EUR/MWh
 </code></pre>
-<p><code>K_lo</code> / <code>K_hi</code> par défaut : <code>[F · 0.01, F · 10]</code>. Lève <code>ValueError</code> si la
-cible n'est pas atteignable dans la fourchette.</p>
+<p>Defaults for <code>K_lo</code> / <code>K_hi</code>: <code>[F · 0.01, F · 10]</code>. Raises <code>ValueError</code> if the
+target is not reachable within the bracket.</p>
 <h4 id="bach_delta_to_strikedelta_target-f-t-r-sigma_n-option_typecall-k_lonone-k_hinone-float"><code>bach_delta_to_strike(delta_target, F, T, r, sigma_n, option_type='call', K_lo=None, K_hi=None) -&gt; float</code></h4>
-<p>Variante Bachelier — utile pour les forwards négatifs ou très bas.</p>
+<p>Bachelier variant — useful for negative or very low forwards.</p>
 <pre><code class="language-python">from black76_ttf import bach_delta_to_strike
 
 bach_delta_to_strike(delta_target=0.25,
@@ -571,14 +569,14 @@ bach_delta_to_strike(delta_target=0.25,
                      option_type=&quot;call&quot;)
 # -&gt; 35.0570   EUR/MWh
 </code></pre>
-<p><code>K_lo</code> / <code>K_hi</code> par défaut : <code>[F − 10·σ_n·√T, F + 10·σ_n·√T]</code>.</p>
+<p>Defaults for <code>K_lo</code> / <code>K_hi</code>: <code>[F − 10·σ_n·√T, F + 10·σ_n·√T]</code>.</p>
 <hr>
-<h2 id="annexe-a-valeurs-de-reference-3-mois-atm">Annexe A — Valeurs de référence (3 mois, ATM)</h2>
-<p>Avec <code>F = 30 EUR/MWh, K = 30, T = 0.25, r = 0.02</code> :</p>
+<h2 id="appendix-a-reference-values-3-months-atm">Appendix A — Reference values (3 months, ATM)</h2>
+<p>With <code>F = 30 EUR/MWh, K = 30, T = 0.25, r = 0.02</code>:</p>
 <table>
 <thead>
 <tr>
-<th>Modèle</th>
+<th>Model</th>
 <th>sigma</th>
 <th>Call</th>
 <th>Put</th>
@@ -608,10 +606,10 @@ bach_delta_to_strike(delta_target=0.25,
 </tr>
 </tbody>
 </table>
-<p><code>C − P</code> théorique = <code>e^(-0.02·0.25)·(30 − 30) = 0</code>. Vérifié sur les deux
-modèles (différence &lt; 1e-12 EUR/MWh).</p>
+<p>Theoretical <code>C − P</code> = <code>e^(-0.02·0.25)·(30 − 30) = 0</code>. Verified on both models
+(difference &lt; 1e-12 EUR/MWh).</p>
 <div class="footer-note">
-  TTF Options Pricing Library &middot; Tous les prix sont indicatifs &middot; Document généré automatiquement depuis user_manual.md
+  TTF Options Pricing Library &middot; All prices are indicative &middot; Document generated automatically from user_manual.md
 </div>
 </body>
 </html>
