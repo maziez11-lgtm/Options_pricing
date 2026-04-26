@@ -133,6 +133,7 @@ a:hover { text-decoration: underline; }
 <li><strong>Part 1.</strong> <a href="#1-introduction">Introduction</a> — TTF options, Black-76 vs Bachelier, Greeks</li>
 <li><strong>Part 2.</strong> <a href="#2-black76_ttfpy"><code>black76_ttf.py</code></a> — every function with worked examples</li>
 <li><strong>Part 4.</strong> <a href="#4-ttf_hh_spreadpy"><code>ttf_hh_spread.py</code></a> — TTF/HH spread option (Margrabe 1978)</li>
+<li><strong>Part 5.</strong> <a href="#5-dashboard_jupyteripynb"><code>dashboard_jupyter.ipynb</code></a> — section-by-section user guide</li>
 </ul>
 <blockquote>
 <p><strong>Conventions used throughout the examples</strong></p>
@@ -836,6 +837,231 @@ print_summary(res)
 </tbody>
 </table>
 <p>PCP holds to better than <code>1e-8 USD/MMBtu</code>.</p>
+<hr>
+<h2 id="5-dashboard_jupyteripynb">5. <code>dashboard_jupyter.ipynb</code></h2>
+<p>Interactive <strong>Jupyter dashboard</strong> built on top of the four pricing modules.
+Each section is a standalone widget panel: tweak the sliders/dropdowns and the
+prices, Greeks and charts re-render automatically.</p>
+<h3 id="50-launching-the-notebook">5.0 Launching the notebook</h3>
+<pre><code class="language-bash"># from the project root
+pip install -r requirements.txt   # numpy, scipy, matplotlib, pandas,
+                                  # ipywidgets, jupyterlab
+jupyter lab dashboard_jupyter.ipynb
+</code></pre>
+<p>Then run the cells from top to bottom (<code>Shift + Enter</code>). Dependencies
+pulled in by the notebook:</p>
+<table>
+<thead>
+<tr><th>Module</th><th>Used by</th></tr>
+</thead>
+<tbody>
+<tr><td><code>black76_ttf</code></td><td>Section 1 (Pricer), Section 5 (expiries)</td></tr>
+<tr><td><code>structures_ttf</code></td><td>Section 2 (multi-leg structures)</td></tr>
+<tr><td><code>ttf_hh_spread</code></td><td>Section 4 (Margrabe spread)</td></tr>
+<tr><td><code>ipywidgets</code>, <code>matplotlib</code>, <code>pandas</code>, <code>numpy</code></td><td>UI + plots + tables</td></tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Tip</strong>: each section reads only its own widgets — you can edit / collapse
+any one of them without breaking the others.</p>
+</blockquote>
+<h3 id="51-section-1-pricer-black-76-bachelier">5.1 Section 1 — Pricer (Black-76 / Bachelier)</h3>
+<p>Single-leg European call/put pricer with full Greeks.</p>
+<p><strong>Inputs</strong></p>
+<table>
+<thead>
+<tr><th>Widget</th><th>Description</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Model</code></td><td><code>Black-76</code> (lognormal) or <code>Bachelier</code> (normal)</td><td>Black-76</td></tr>
+<tr><td><code>Forward (EUR/MWh)</code></td><td>Underlying TTF forward <code>F</code></td><td>35.00</td></tr>
+<tr><td><code>Strike (EUR/MWh)</code></td><td>Exercise price <code>K</code></td><td>35.00</td></tr>
+<tr><td><code>Maturity (years)</code></td><td><code>T</code>, ACT/365</td><td>0.25</td></tr>
+<tr><td><code>Rate (decimal)</code></td><td>Risk-free rate <code>r</code> (annualised)</td><td>0.03</td></tr>
+<tr><td><code>Vol (lognormal)</code></td><td>Black-76 σ (visible only when <code>Model = Black-76</code>)</td><td>0.50</td></tr>
+<tr><td><code>Vol (EUR/MWh)</code></td><td>Bachelier σₙ (visible only when <code>Model = Bachelier</code>)</td><td>10.00</td></tr>
+</tbody>
+</table>
+<p><strong>Outputs</strong></p>
+<ul>
+<li>Call and put premiums in EUR/MWh.</li>
+<li>Full Greek block for both call and put: <code>delta</code>, <code>gamma</code>, <code>vega</code>,
+<code>theta</code> (per calendar day), <code>rho</code> (per percentage point), <code>vanna</code>, <code>volga</code>.</li>
+</ul>
+<p><strong>Behaviour</strong></p>
+<ul>
+<li>The vol slider auto-toggles between lognormal (Black-76) and normal
+(Bachelier) when the model dropdown changes — only the relevant one is shown.</li>
+<li>Recomputation is triggered on slider release (<code>continuous_update=False</code>),
+so the panel stays responsive on slow links.</li>
+<li>Internally calls <code>b76_call</code>, <code>b76_put</code>, <code>b76_greeks</code> (resp. <code>bach_*</code>) from
+<code>black76_ttf.py</code>.</li>
+</ul>
+<h3 id="52-section-2-structures-10-multi-leg-payoffs">5.2 Section 2 — Structures (10 multi-leg payoffs)</h3>
+<p>Pricer + P&amp;L chart for the standard option structures wrapped in
+<code>structures_ttf.py</code>. Black-76 only, fixed <code>r = 3 %</code>.</p>
+<p><strong>Available structures</strong></p>
+<table>
+<thead>
+<tr><th>#</th><th>Structure</th><th>Strike inputs</th></tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>Straddle</td><td><code>K</code></td></tr>
+<tr><td>2</td><td>Strangle</td><td><code>K_put</code>, <code>K_call</code></td></tr>
+<tr><td>3</td><td>Bull Call Spread</td><td><code>K_lo</code>, <code>K_hi</code></td></tr>
+<tr><td>4</td><td>Bear Put Spread</td><td><code>K_lo</code>, <code>K_hi</code></td></tr>
+<tr><td>5</td><td>Butterfly</td><td><code>K_lo</code>, <code>K_mid</code>, <code>K_hi</code></td></tr>
+<tr><td>6</td><td>Condor</td><td><code>K1</code>, <code>K2</code>, <code>K3</code>, <code>K4</code></td></tr>
+<tr><td>7</td><td>Collar</td><td><code>K_put</code>, <code>K_call</code></td></tr>
+<tr><td>8</td><td>Risk Reversal</td><td><code>K_put</code>, <code>K_call</code></td></tr>
+<tr><td>9</td><td>Calendar Spread</td><td><code>K</code> (<code>T_far = T + 3 months</code>)</td></tr>
+<tr><td>10</td><td>Ratio Spread 1×2</td><td><code>K_lo</code>, <code>K_hi</code></td></tr>
+</tbody>
+</table>
+<p><strong>Inputs</strong></p>
+<ul>
+<li><code>Structure</code> dropdown — picking a new structure resets the strike sliders to
+sensible defaults around the forward (e.g. <code>F − 4, F, F + 4</code> for a butterfly).</li>
+<li><code>Forward (EUR/MWh)</code>, <code>Maturity (years)</code>, <code>Vol (lognormal)</code>.</li>
+<li>1 to 4 strike sliders <code>K1 … K4</code> whose <strong>labels and visibility adapt</strong> to the
+selected structure.</li>
+</ul>
+<p><strong>Outputs</strong></p>
+<ul>
+<li><strong>Net premium</strong> in EUR/MWh, labelled <code>debit</code> if positive, <code>credit</code> if negative.</li>
+<li><strong>Net Greeks</strong>: <code>delta</code>, <code>gamma</code>, <code>vega</code>, <code>theta</code> (per calendar day).</li>
+<li><strong>Breakevens</strong> (forward levels at expiry where P&amp;L = 0).</li>
+<li><strong>Max profit</strong> / <strong>max loss</strong> (<code>+inf</code> / <code>−inf</code> for unbounded structures).</li>
+<li><strong>P&amp;L chart at expiry</strong> with:
+<ul>
+<li>solid blue line = total payoff − net premium,</li>
+<li>dashed grey line = current forward,</li>
+<li>dotted red lines = breakevens,</li>
+<li>light green vertical lines = strikes,</li>
+<li>green/red shading = profit/loss zones.</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p><strong>Tip</strong>: Calendar Spread is the only structure that uses two maturities —
+the slider drives <code>T_near</code>, while <code>T_far = T_near + 0.25 yr</code> is fixed inside
+the dispatcher.</p>
+</blockquote>
+<h3 id="53-section-3-vol-surface-parametric-3d">5.3 Section 3 — Vol Surface (parametric, 3D)</h3>
+<p>Parametric implied volatility surface, displayed as an interactive 3D
+<code>matplotlib</code> plot.</p>
+<p><strong>Model</strong></p>
+<p>ATM term structure plus a smile in log-moneyness:</p>
+<pre><code>atm(T)     = sigma_inf + delta_sigma · exp(−kappa · T)
+m(K, T)    = ln(K / F) / sqrt(T)
+sigma(K,T) = atm(T) + skew · m + wings · m²        (clipped to [0.01, 5.00])
+</code></pre>
+<p>The forward is held constant across the whole grid (a true forward curve
+could be plugged in via <code>ttf_market_data</code> later).</p>
+<p><strong>Inputs</strong></p>
+<table>
+<thead>
+<tr><th>Widget</th><th>Meaning</th><th>Range</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Forward (EUR/MWh)</code></td><td><code>F</code> (constant across the grid)</td><td>5 – 100</td></tr>
+<tr><td><code>sigma_inf (long ATM)</code></td><td>long-end ATM vol</td><td>0.10 – 1.00</td></tr>
+<tr><td><code>delta_sigma (short ATM)</code></td><td>additional short-end ATM bump</td><td>0.00 – 1.00</td></tr>
+<tr><td><code>kappa (decay)</code></td><td>exponential decay rate of the bump</td><td>0.1 – 8.0</td></tr>
+<tr><td><code>skew</code></td><td>linear smile slope vs log-moneyness</td><td>−0.40 – +0.40</td></tr>
+<tr><td><code>wings (convexity)</code></td><td>quadratic smile coefficient</td><td>0.00 – 0.50</td></tr>
+<tr><td><code>range strikes (± %)</code></td><td>strike grid half-width vs <code>F</code></td><td>10 % – 90 %</td></tr>
+<tr><td><code>T max (years)</code></td><td>longest maturity on the surface</td><td>0.25 – 5.0</td></tr>
+</tbody>
+</table>
+<p><strong>Outputs</strong></p>
+<ul>
+<li>A 3D surface plot (axes: <code>K</code>, <code>T</code>, <code>σ</code>) with the <code>viridis</code> colormap and a colourbar.</li>
+<li>Two info lines below the chart: <code>ATM(T=0)</code>, <code>ATM(T=∞)</code>, the achieved vol
+range and the grid size (default 35 strikes × 25 maturities).</li>
+</ul>
+<blockquote>
+<p><strong>Tip</strong>: a negative <code>skew</code> (default <code>−0.08</code>) reproduces the classic TTF
+shape — OTM puts trade richer than OTM calls. Increase <code>wings</code> to fatten
+both tails.</p>
+</blockquote>
+<h3 id="54-section-4-ttf-henry-hub-spread-margrabe">5.4 Section 4 — TTF / Henry Hub Spread (Margrabe)</h3>
+<p>UI wrapper around <code>ttf_hh_spread.spread_price</code> (see Part 4). Prices and
+plots both the <strong>payoff at expiry</strong> and the <strong>current option value</strong> along
+the TTF axis, with a secondary x-axis in EUR/MWh.</p>
+<p><strong>Inputs</strong></p>
+<table>
+<thead>
+<tr><th>Widget</th><th>Description</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Option</code></td><td><code>call</code> or <code>put</code></td><td>call</td></tr>
+<tr><td><code>Forward TTF (EUR/MWh)</code></td><td>TTF forward in EUR/MWh</td><td>35.00</td></tr>
+<tr><td><code>Forward HH (USD/MMBtu)</code></td><td>Henry Hub forward in USD/MMBtu</td><td>3.50</td></tr>
+<tr><td><code>Vol TTF (lognormal)</code></td><td>σ_TTF</td><td>0.50</td></tr>
+<tr><td><code>Vol HH (lognormal)</code></td><td>σ_HH</td><td>0.45</td></tr>
+<tr><td><code>Correlation rho</code></td><td>TTF/HH correlation ρ</td><td>0.50</td></tr>
+<tr><td><code>Maturity (years)</code></td><td><code>T</code>, ACT/365</td><td>0.50</td></tr>
+<tr><td><code>FX EUR/USD</code></td><td>spot FX used to convert TTF to USD/MMBtu</td><td>1.080</td></tr>
+<tr><td><code>Rate USD</code></td><td>USD risk-free rate</td><td>0.04</td></tr>
+<tr><td><code>Market price (USD/MMBtu)</code></td><td>optional input for implied correlation</td><td>0.00</td></tr>
+</tbody>
+</table>
+<p><strong>Outputs</strong></p>
+<ul>
+<li>TTF forward shown in <strong>both</strong> EUR/MWh and USD/MMBtu, plus the spread vol
+<code>σ_spread = √(σ_TTF² + σ_HH² − 2·ρ·σ_TTF·σ_HH)</code>.</li>
+<li>Premium in <strong>both</strong> USD/MMBtu and EUR/MWh.</li>
+<li>All Margrabe Greeks: <code>delta_ttf</code>, <code>delta_hh</code>, <code>gamma_ttf</code>,
+<code>vega_ttf</code>, <code>vega_hh</code>, <code>vega_rho</code>, <code>theta</code> per calendar day.</li>
+<li><strong>Implied correlation</strong>: if <code>Market price &gt; 0</code>, the panel solves
+<code>implied_correlation</code> and prints the result. If the quote is outside the
+achievable corridor, an explanatory error is shown instead.</li>
+<li>A <strong>payoff vs option-value chart</strong>:
+<ul>
+<li>blue solid line = payoff at expiry vs <code>F_TTF</code> (USD/MMBtu),</li>
+<li>orange dashed line = current Margrabe value at the chosen <code>T</code>,</li>
+<li>vertical reference lines at <code>F_TTF</code> (grey) and <code>F_HH</code> (red),</li>
+<li>top x-axis = <code>F_TTF</code> translated back into EUR/MWh.</li>
+</ul>
+</li>
+</ul>
+<h3 id="55-section-5-expiry-dates-ice-endex-dutch-ttf">5.5 Section 5 — Expiry Dates (ICE Endex Dutch TTF)</h3>
+<p>Calendar viewer for the official ICE Endex TTF option expiries.</p>
+<p><strong>Rule</strong>: <code>expiry = (1st of delivery month) − 5 calendar days</code>; if not a
+business day, roll back to the previous business day (NL + UK holidays); if
+equal to the futures LTD, roll back one extra business day.</p>
+<p><strong>Inputs</strong></p>
+<table>
+<thead>
+<tr><th>Widget</th><th>Description</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Number of contracts</code></td><td>how many forthcoming expiries to display</td><td>12</td></tr>
+<tr><td><code>Reference</code></td><td>reference date for the lookup</td><td>today</td></tr>
+</tbody>
+</table>
+<p><strong>Outputs</strong></p>
+<p>A <code>pandas</code> DataFrame with one row per contract:</p>
+<table>
+<thead>
+<tr><th>Column</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Contract</code></td><td>ICE code (<code>TTFK26</code>, <code>TTFM26</code>, …)</td></tr>
+<tr><td><code>Delivery</code></td><td>delivery month (<code>May-26</code>, <code>Jun-26</code>, …)</td></tr>
+<tr><td><code>Option expiry</code></td><td>ISO date of the option expiry</td></tr>
+<tr><td><code>Days to expiry</code></td><td><code>(expiry − reference) + 1</code> calendar days</td></tr>
+<tr><td><code>T (years)</code></td><td><code>T = Days / 365</code></td></tr>
+<tr><td><code>Futures LTD</code></td><td>last trading day of the underlying future</td></tr>
+</tbody>
+</table>
+<p>A <strong>horizontal bar chart</strong> displays <code>T (years)</code> for each contract,
+annotated with the calendar-day count.</p>
+<blockquote>
+<p><strong>Backed by</strong>: <code>ttf_next_expiries</code>, <code>ttf_time_to_expiry</code>,
+<code>_ttf_futures_ltd</code> from <code>black76_ttf.py</code>.</p>
+</blockquote>
 <hr>
 <h2 id="appendix-a-reference-values-3-months-atm">Appendix A — Reference values (3 months, ATM)</h2>
 <p>With <code>F = 30 EUR/MWh, K = 30, T = 0.25, r = 0.02</code>:</p>
