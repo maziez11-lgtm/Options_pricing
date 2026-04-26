@@ -134,6 +134,7 @@ a:hover { text-decoration: underline; }
 <li><strong>Part 2.</strong> <a href="#2-black76_ttfpy"><code>black76_ttf.py</code></a> — every function with worked examples</li>
 <li><strong>Part 4.</strong> <a href="#4-ttf_hh_spreadpy"><code>ttf_hh_spread.py</code></a> — TTF/HH spread option (Margrabe 1978)</li>
 <li><strong>Part 5.</strong> <a href="#5-dashboard_jupyteripynb"><code>dashboard_jupyter.ipynb</code></a> — section-by-section user guide</li>
+<li><strong>Part 6.</strong> <a href="#6-financial-glossary">Financial glossary</a> — every term used in the project</li>
 </ul>
 <blockquote>
 <p><strong>Conventions used throughout the examples</strong></p>
@@ -1062,6 +1063,223 @@ annotated with the calendar-day count.</p>
 <p><strong>Backed by</strong>: <code>ttf_next_expiries</code>, <code>ttf_time_to_expiry</code>,
 <code>_ttf_futures_ltd</code> from <code>black76_ttf.py</code>.</p>
 </blockquote>
+<hr>
+<h2 id="6-financial-glossary">6. Financial glossary</h2>
+<p>Every market, model, Greek, structure and numerical convention used in the
+project, grouped by topic. Cross-references in <em>italics</em> point to other
+glossary entries.</p>
+<h3 id="61-markets-and-underlyings">6.1 Markets and underlyings</h3>
+<ul>
+<li><strong>TTF</strong> (<em>Title Transfer Facility</em>) — Dutch virtual natural gas hub
+operated by Gasunie Transport Services. The European benchmark for natural gas.</li>
+<li><strong>Henry Hub (HH)</strong> — Physical natural gas pipeline interconnection in
+Erath, Louisiana. The US benchmark, settlement reference for NYMEX natural
+gas futures.</li>
+<li><strong>ICE Endex</strong> — Exchange listing the <em>TTF</em> futures and options. Sets
+the official expiry calendar (Dutch + UK holiday rules).</li>
+<li><strong>Forward</strong> — Agreed price today for delivery on a future date. Notation
+<code>F</code>. Implicitly already includes carry and interest, hence Black-76 prices
+options on <code>F</code> rather than on a spot price.</li>
+<li><strong>Future / Futures contract</strong> — Exchange-listed, marked-to-market version
+of a forward. One TTF futures contract = physical delivery over a given
+delivery month.</li>
+<li><strong>Delivery month</strong> — The calendar month over which a TTF futures contract
+delivers gas (e.g. <code>Jun26</code> → June 2026).</li>
+<li><strong>LTD</strong> (<em>Last Trading Day</em>) — The last business day on which the future
+itself can be traded. The TTF option expires <strong>before</strong> the futures LTD.</li>
+<li><strong>LNG</strong> (<em>Liquefied Natural Gas</em>) — Cross-basin transportable form of
+natural gas. LNG flows between TTF and HH drive the spread vol via the
+<em>netback</em> relationship.</li>
+<li><strong>Netback</strong> — Arbitrage-style equality between two regional prices net of
+liquefaction, shipping and regasification costs. Drives convergence of TTF
+and HH and therefore the <em>implied correlation</em> on the spread.</li>
+</ul>
+<h3 id="62-option-mechanics">6.2 Option mechanics</h3>
+<ul>
+<li><strong>Option</strong> — Right (without the obligation) to transact an underlying at
+a fixed price.</li>
+<li><strong>Call</strong> — Option to <strong>buy</strong> the underlying at strike <code>K</code>. Payoff at
+expiry: <code>max(F_T − K, 0)</code>.</li>
+<li><strong>Put</strong> — Option to <strong>sell</strong> the underlying at strike <code>K</code>. Payoff at
+expiry: <code>max(K − F_T, 0)</code>.</li>
+<li><strong>European style</strong> — Exercise allowed <strong>only at expiry</strong>. The whole
+library assumes European options.</li>
+<li><strong>American style</strong> — Exercise allowed at any time up to expiry (not used
+here).</li>
+<li><strong>Strike</strong> (<code>K</code>) — Pre-agreed exercise price.</li>
+<li><strong>Maturity / Expiry</strong> (<code>T</code>) — Date / remaining time at which the option
+can be exercised. Expressed in years (<em>ACT/365</em>).</li>
+<li><strong>Premium</strong> — Price paid for the option (in EUR/MWh or USD/MMBtu).</li>
+<li><strong>Debit / Credit</strong> — A multi-leg structure with a <em>positive</em> net premium
+(cost) is a <em>debit</em>; with a <em>negative</em> net premium (proceeds) it is a
+<em>credit</em>.</li>
+<li><strong>Intrinsic value</strong> — Immediate exercise value: <code>max(F − K, 0)</code> (call) or
+<code>max(K − F, 0)</code> (put). What an option would be worth if expiry were now.</li>
+<li><strong>Time value</strong> — <code>Premium − Intrinsic</code>. Positive while <em>T &gt; 0</em>.</li>
+<li><strong>ATM</strong> (<em>At-The-Money</em>) — <code>K = F</code>.</li>
+<li><strong>ITM</strong> (<em>In-The-Money</em>) — Call: <code>K &lt; F</code>. Put: <code>K &gt; F</code>. Positive intrinsic.</li>
+<li><strong>OTM</strong> (<em>Out-of-The-Money</em>) — Call: <code>K &gt; F</code>. Put: <code>K &lt; F</code>. Zero intrinsic.</li>
+<li><strong>Moneyness</strong> — Generic ratio describing the relationship between <code>K</code> and
+<code>F</code>. <em>Log-moneyness</em> <code>m = ln(K / F) / √T</code> is used by the vol smile.</li>
+<li><strong>Payoff</strong> — Cashflow at expiry as a function of the terminal forward
+<code>F_T</code>.</li>
+<li><strong>P&amp;L at expiry</strong> — Payoff <em>net of the premium paid</em>, used in
+<em>Section 2</em> of the dashboard.</li>
+<li><strong>Breakeven</strong> — Forward level at expiry at which net P&amp;L = 0.</li>
+<li><strong>Put-call parity (PCP)</strong> — Model-free identity:
+<code>C − P = e^(−rT) · (F − K)</code>. Holds for both Black-76 and Bachelier; the
+Margrabe analogue is <code>C − P = e^(−rT) · (F_TTF − F_HH)</code>.</li>
+</ul>
+<h3 id="63-pricing-models">6.3 Pricing models</h3>
+<ul>
+<li><strong>Black-Scholes (1973)</strong> — Foundational lognormal model for stock options
+with continuous dividends.</li>
+<li><strong>Black-76 (1976)</strong> — Adaptation of Black-Scholes for options on
+<strong>forwards</strong> (no spot, no carry):
+<code>C = e^(−rT)·[F·N(d₁) − K·N(d₂)]</code> with
+<code>d₁ = [ln(F/K) + ½σ²T] / (σ√T)</code>, <code>d₂ = d₁ − σ√T</code>.
+Default model in this project for <code>F ≫ 0</code>.</li>
+<li><strong>Bachelier (1900)</strong> — Normal (arithmetic) Brownian-motion model:
+<code>dF = σₙ · dW</code>. Allows <strong>negative forwards</strong>, hence the right model for
+TTF in crisis or for spreads.</li>
+<li><strong>Margrabe (1978)</strong> — Closed-form pricer for an <em>exchange option</em> on two
+log-normal forwards. See <em>Spread vol</em>.</li>
+<li><strong>Risk-neutral measure</strong> — Probability measure under which discounted
+forwards are martingales. All pricers in the library evaluate
+expectations under that measure.</li>
+<li><strong>Discount factor (DF)</strong> — <code>e^(−rT)</code>. Multiplies the forward expectation
+to convert it into a present value.</li>
+<li><strong>Risk-free rate</strong> (<code>r</code>) — Annualised continuously compounded rate.
+Decimal (<code>0.02 = 2 %</code>).</li>
+<li><strong>No-arbitrage bounds</strong> — A call price must lie in
+<code>[max(0, e^(−rT)(F−K)), e^(−rT)·F]</code>. The implied-vol solvers raise
+<code>ValueError</code> if a quote breaches them.</li>
+<li><strong>N(·) / Φ(·)</strong> — Standard-normal CDF.</li>
+<li><strong>φ(·) / n(·)</strong> — Standard-normal PDF.</li>
+</ul>
+<h3 id="64-the-greeks">6.4 The Greeks</h3>
+<p>Sensitivities of the option price <code>V</code> with respect to its inputs.</p>
+<ul>
+<li><strong>Delta (Δ)</strong> — <code>∂V / ∂F</code>. Hedge ratio in forward units. Discounted by
+<code>e^(−rT)</code> here. <code>Δ_call − Δ_put = e^(−rT)</code>.</li>
+<li><strong>Gamma (Γ)</strong> — <code>∂²V / ∂F²</code>. Convexity in the forward; identical for
+call and put. Peaks ATM and decays toward expiry.</li>
+<li><strong>Vega (ν)</strong> — <code>∂V / ∂σ</code>. Sensitivity to volatility. Reported here per
+unit (1.00 = 100 %) of vol; divide by 100 for the market "per 1 vol point"
+convention.</li>
+<li><strong>Theta (Θ)</strong> — <code>∂V / ∂t</code>. Time decay. Reported <strong>per calendar day</strong>.
+Negative for a long option.</li>
+<li><strong>Rho (ρ)</strong> — <code>∂V / ∂r</code>. Sensitivity to the risk-free rate. Reported
+per <em>percentage point</em> of rate change.</li>
+<li><strong>Vanna</strong> — <code>∂²V / (∂F ∂σ) = ∂Δ / ∂σ</code>. Cross-derivative used in
+skew-aware risk management. Zero ATM under Bachelier.</li>
+<li><strong>Volga</strong> (also <em>Vomma</em>) — <code>∂²V / ∂σ²</code>. Vol convexity, drives the
+smile-roll risk.</li>
+<li><strong>Charm</strong> / <strong>Color</strong> / <strong>Speed</strong> — Higher-order Greeks not used here
+but occasionally referenced in the literature.</li>
+<li><strong>Net Greeks</strong> — Greeks aggregated across the legs of a multi-leg
+structure (Section 2 of the dashboard).</li>
+</ul>
+<h3 id="65-volatility">6.5 Volatility</h3>
+<ul>
+<li><strong>Volatility (σ)</strong> — Standard deviation of returns of the underlying.</li>
+<li><strong>Lognormal vol</strong> — σ used in <em>Black-76</em>; dimensionless, decimal
+(<code>0.50 = 50 %</code>).</li>
+<li><strong>Normal vol</strong> (σₙ) — σ used in <em>Bachelier</em>; absolute units, EUR/MWh.
+Rule of thumb: <code>σₙ ≈ F · σ</code> for matching ATM prices.</li>
+<li><strong>Implied volatility (IV)</strong> — Vol level that, plugged into the model,
+reproduces a quoted market price. Solved by <em>Brent's method</em> in the
+library (<code>b76_implied_vol</code>, <code>bach_implied_vol</code>).</li>
+<li><strong>ATM volatility</strong> — IV at <code>K = F</code>.</li>
+<li><strong>Smile</strong> — Convex shape of <code>IV(K)</code> as a function of strike (or
+log-moneyness).</li>
+<li><strong>Skew</strong> — Slope of the smile. The TTF smile is typically negatively
+skewed (OTM puts trade richer than OTM calls).</li>
+<li><strong>Wings</strong> — Quadratic / convex contribution to the smile, fattening the
+tails on both sides.</li>
+<li><strong>Term structure</strong> — Variation of ATM IV with maturity <code>T</code>.</li>
+<li><strong>Vol surface</strong> — Two-dimensional <code>IV(K, T)</code>. Section 3 of the dashboard
+builds a parametric one:
+<code>σ(K,T) = sigma_inf + Δσ·exp(−κT) + skew·m + wings·m²</code>.</li>
+<li><strong>25-delta / 50-delta / 75-delta strike</strong> — Strike whose call delta
+equals the given target. Standard quote convention; obtained via
+<code>b76_delta_to_strike</code> / <code>bach_delta_to_strike</code>.</li>
+<li><strong>Risk reversal</strong> — Difference of IVs between the 25Δ call and the 25Δ
+put; measures <em>skew</em>. Also the name of a multi-leg structure (see 6.7).</li>
+</ul>
+<h3 id="66-spread-and-correlation">6.6 Spread and correlation</h3>
+<ul>
+<li><strong>Spread</strong> — Difference of two related prices. Here <code>F_TTF − F_HH</code> after
+unit conversion to USD/MMBtu.</li>
+<li><strong>Spread option</strong> — Option whose payoff depends on a spread, e.g.
+<code>max(F_TTF − F_HH, 0)</code>.</li>
+<li><strong>Exchange option</strong> — Option to swap one asset for another at expiry,
+i.e. <code>max(F₁ − F₂, 0)</code>. Margrabe (1978) gives a closed form.</li>
+<li><strong>Margrabe formula</strong> — Closed-form price of an exchange option:
+<code>C = e^(−rT)·[F₁·N(d₁) − F₂·N(d₂)]</code> with
+<code>d₁ = [ln(F₁/F₂) + ½σₛ²T] / (σₛ√T)</code>, <code>d₂ = d₁ − σₛ√T</code>.</li>
+<li><strong>Spread vol (σₛ)</strong> — Effective lognormal vol of the spread:
+<code>σₛ = √(σ₁² + σ₂² − 2·ρ·σ₁·σ₂)</code>. Used inside Margrabe.</li>
+<li><strong>Correlation (ρ)</strong> — Instantaneous correlation between the two
+log-forwards. ρ → +1 → assets co-move → spread vol shrinks → option
+cheaper.</li>
+<li><strong>Implied correlation</strong> — ρ backed out of a market spread-option price
+via <code>implied_correlation</code> (Brent on a monotone function of ρ).</li>
+<li><strong>MWh / MMBtu</strong> — Energy units. <code>1 MWh = 3.412142 MMBtu</code>. TTF quotes in
+EUR/MWh, HH in USD/MMBtu, hence the conversion in
+<code>ttf_eur_to_usd</code> / <code>ttf_usd_to_eur</code>.</li>
+<li><strong>FX EUR/USD</strong> — Exchange rate (e.g. <code>1.08</code>). Combined with the energy
+conversion to compare TTF and HH on the same axis.</li>
+</ul>
+<h3 id="67-multi-leg-structures">6.7 Multi-leg structures</h3>
+<p>Eleven structures bundled by <code>structures_ttf.py</code> and exposed in Section 2 of
+the dashboard.</p>
+<ul>
+<li><strong>Straddle</strong> — Long call + long put at the <strong>same</strong> strike <code>K</code>. Pure
+vol bet, max profit unbounded, max loss = total premium.</li>
+<li><strong>Strangle</strong> — Long OTM put <code>K_put</code> + long OTM call <code>K_call</code>. Cheaper
+than a straddle, requires a wider move to break even.</li>
+<li><strong>Bull Call Spread</strong> — Long call <code>K_lo</code> + short call <code>K_hi</code>. Bounded
+bullish payoff for a <em>debit</em>.</li>
+<li><strong>Bear Put Spread</strong> — Long put <code>K_hi</code> + short put <code>K_lo</code>. Bounded
+bearish payoff for a <em>debit</em>.</li>
+<li><strong>Butterfly</strong> — Long <code>K_lo</code> + short 2 × <code>K_mid</code> + long <code>K_hi</code> (all
+calls or all puts). Pin-risk play, max profit at <code>K_mid</code>.</li>
+<li><strong>Condor</strong> — Four-strike generalisation of the butterfly:
+long <code>K1</code> + short <code>K2</code> + short <code>K3</code> + long <code>K4</code>. Wide pin zone.</li>
+<li><strong>Collar</strong> — Long put <code>K_put</code> + short call <code>K_call</code>. Caps both upside
+and downside, near-zero premium for a hedger of the underlying.</li>
+<li><strong>Risk Reversal</strong> — Short put <code>K_put</code> + long call <code>K_call</code>. Synthetic
+long forward; price reflects the <em>skew</em>.</li>
+<li><strong>Calendar Spread</strong> — Short near-dated option + long far-dated option at
+the same strike. Sells short-dated theta against long-dated vega.</li>
+<li><strong>Ratio Spread (1×2)</strong> — Long 1 × <code>K_lo</code> + short 2 × <code>K_hi</code>. Cheap or
+even <em>credit</em> directional bet with naked-leg risk past <code>K_hi</code>.</li>
+<li><strong>Net premium</strong> — Sum of premiums across the legs (sign-aware).</li>
+<li><strong>Breakevens / Max profit / Max loss</strong> — Reported by the dashboard for
+each structure (<code>+inf</code> / <code>−inf</code> for unbounded structures).</li>
+</ul>
+<h3 id="68-conventions-and-numerics">6.8 Conventions and numerics</h3>
+<ul>
+<li><strong>ACT/365</strong> — Day-count convention used throughout: <code>T = days / 365</code>,
+including the reference day.</li>
+<li><strong>Business day</strong> — Mon–Fri excluding NL + UK holidays. Implemented in
+<code>ttf_is_business_day</code> (1 January, Good Friday, Easter Monday, 1 May,
+25 and 26 December).</li>
+<li><strong>ICE month codes</strong> — <code>F G H J K M N Q U V X Z</code> for January–December.
+Combined with a 2-digit year: <code>TTFM26</code> = June 2026.</li>
+<li><strong>Reference date</strong> — Date from which <code>T</code> is measured. Defaults to
+<code>date.today()</code> in the helpers.</li>
+<li><strong>Brent's method</strong> — Bracketing root-finder used for <em>implied volatility</em>
+and <em>implied correlation</em> (<code>xtol = 1e-8</code>, max 300 iterations).</li>
+<li><strong>Finite-difference Theta</strong> — Theta is computed by
+<code>V(T − 1/365) − V(T)</code> rather than analytically, to stay consistent across
+the four pricers.</li>
+<li><strong>Sign convention</strong> — Greeks reported with their natural sign: long call
+Δ &gt; 0, long option Θ &lt; 0, etc.</li>
+<li><strong>Numerical accuracy</strong> — All round-trip identities (PCP, IV → price → IV,
+spread PCP) are verified to better than <code>1e-8</code> in the built-in tests.</li>
+</ul>
 <hr>
 <h2 id="appendix-a-reference-values-3-months-atm">Appendix A — Reference values (3 months, ATM)</h2>
 <p>With <code>F = 30 EUR/MWh, K = 30, T = 0.25, r = 0.02</code>:</p>
