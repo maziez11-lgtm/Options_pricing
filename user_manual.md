@@ -4,6 +4,7 @@ Ce manuel couvre :
 
 1. [Introduction](#1-introduction) — options TTF, Black-76 vs Bachelier, Greeks
 2. [`black76_ttf.py`](#2-black76_ttfpy) — toutes les fonctions avec exemples chiffrés
+3. [`ttf_market_data.py`](#3-ttf_market_datapy) — market data and vol surface
 
 > **Conventions utilisées dans tous les exemples**
 > - Forward TTF : `F = 30 EUR/MWh`
@@ -489,6 +490,352 @@ bach_delta_to_strike(delta_target=0.25,
 ```
 
 `K_lo` / `K_hi` par défaut : `[F − 10·σ_n·√T, F + 10·σ_n·√T]`.
+
+---
+
+## 3. `ttf_market_data.py`
+
+End-to-end market data layer for the TTF natural gas curve and its volatility
+surface. The module is **fully self-contained** (no `yfinance` dependency) and
+gracefully falls back to a synthetic curve when the public quote feed is
+unreachable.
+
+What is covered:
+
+- TTF expiry calendar (ICE/EEX conventions)
+- Forward curve fetching (Yahoo Finance via `requests`) with synthetic fallback
+- Volatility surface construction (strikes × maturities, parametric smile)
+- SABR market calibration (Hagan et al. 2002)
+- CSV / JSON export for downstream pricing modules
+
+> **External dependencies** : `numpy`, `pandas`, `scipy`, `requests`.
+> Make sure `requirements.txt` lists `pandas>=2.0` and `requests>=2.31`
+> in addition to `numpy` and `scipy`.
+
+### 3.1 `TTFContract` dataclass
+
+A single monthly contract description.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `delivery_month` | `int` | 1–12 |
+| `delivery_year` | `int` | e.g. `2026` |
+| `expiry_date` | `date` | Options expiry (5 BD before futures LTD) |
+| `futures_expiry_date` | `date` | Futures last trading day |
+| `contract_code` | `str` | ICE-style code, e.g. `"TTFH26"` |
+| `T` | `float` | Time to options expiry in years (ACT/365, today included) |
+
+### 3.2 `TTFExpiryCalendar`
+
+Manages the ICE/EEX TTF calendar starting from an arbitrary reference date.
+
+```python
+from datetime import date
+from ttf_market_data import TTFExpiryCalendar
+
+cal = TTFExpiryCalendar(reference_date=date(2026, 4, 20))
+```
+
+#### `futures_expiry_date(delivery_year, delivery_month) -> date`
+
+Last business day of the month preceding delivery.
+
+```python
+cal.futures_expiry_date(2026, 6)   # TTFM26
+# -> date(2026, 5, 29)             (Friday)
+```
+
+#### `expiry_date(delivery_year, delivery_month) -> date`
+
+Options expiry: 5 business days before the futures LTD.
+
+```python
+cal.expiry_date(2026, 6)
+# -> date(2026, 5, 22)
+```
+
+#### `contract_code(delivery_year, delivery_month) -> str`
+
+Returns the ICE-style code (`TTF` + month code letter + last two digits of the
+year).
+
+```python
+cal.contract_code(2026, 3)         # -> "TTFH26"
+cal.contract_code(2027, 12)        # -> "TTFZ27"
+```
+
+#### `time_to_expiry(expiry) -> float`
+
+Time `T` in years (ACT/365, reference date included). Returns `0` if the expiry
+is already in the past.
+
+```python
+cal.time_to_expiry(date(2026, 5, 22))
+# -> 0.0904   (33 days / 365)
+```
+
+#### `active_contracts(n=12) -> list[TTFContract]`
+
+The next `n` monthly TTF contracts (sorted ascending), skipping any whose
+expiry has already passed relative to the reference date.
+
+```python
+contracts = cal.active_contracts(n=3)
+for c in contracts:
+    print(c.contract_code, c.expiry_date, round(c.T, 4))
+# TTFK26  2026-04-24  0.0137
+# TTFM26  2026-05-22  0.0904
+# TTFN26  2026-06-23  0.1781
+```
+
+#### `expiry_for_tenor(tenor_years) -> date`
+
+Returns the expiry date of the contract closest to a given tenor expressed in
+years. Useful when interpolating a vol smile by tenor rather than by contract.
+
+```python
+cal.expiry_for_tenor(0.50)
+# -> date(2026, 10, 23)   (≈ 6 months from 2026-04-20)
+```
+
+### 3.3 `ForwardPoint` dataclass
+
+A single (contract, price) observation on the curve.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `contract_code` | `str` | e.g. `"TTFM26"` |
+| `delivery_month` | `int` | 1–12 |
+| `delivery_year` | `int` | e.g. `2026` |
+| `expiry_date` | `date` | Options expiry |
+| `T` | `float` | Time to expiry (years, ACT/365) |
+| `forward_price` | `float` | EUR/MWh, rounded to 4 decimals |
+| `source` | `str` | `"yahoo_finance"` or `"synthetic"` |
+
+### 3.4 `TTFForwardCurve`
+
+Fetches and interpolates the TTF forward curve.
+
+```python
+from datetime import date
+from ttf_market_data import TTFForwardCurve
+
+curve = TTFForwardCurve(
+    reference_date=date(2026, 4, 20),
+    risk_free_rate=0.03,
+    timeout=10,
+).load()
+```
+
+The constructor takes:
+
+- `reference_date` : valuation date (defaults to `date.today()`)
+- `risk_free_rate` : EUR risk-free rate used for cost-of-carry projection
+- `timeout` : HTTP timeout in seconds for the Yahoo Finance request
+
+`.load()` fetches the front-month TTF spot from Yahoo Finance
+(`ticker = "TTF=F"`); on failure (network error, throttling, schema change), it
+logs a warning and falls back to a representative synthetic spot of
+`35.0 EUR/MWh`. Each forward is then projected with a small seasonal premium:
+
+```
+seasonal(m) = 0.03 · sin(2π · (m − 1) / 12)
+F(c) = spot · exp((r + seasonal(m)) · T)
+```
+
+#### `forward_price(T) -> float`
+
+Linearly interpolated forward price for a tenor `T` (years). Flat extrapolation
+outside the loaded range.
+
+```python
+curve.forward_price(0.25)   # -> 35.40 EUR/MWh   (illustrative)
+curve.forward_price(1.00)   # -> 36.85 EUR/MWh
+```
+
+#### `to_dataframe() -> pandas.DataFrame`
+
+Returns the full curve as a `DataFrame` with columns
+`contract_code, delivery_month, delivery_year, expiry_date, T, forward_price, source`.
+
+```python
+curve.to_dataframe().head()
+#   contract_code  delivery_month  delivery_year  expiry_date     T  forward_price       source
+# 0       TTFK26               5           2026   2026-04-24  0.014        35.0145  yahoo_finance
+# 1       TTFM26               6           2026   2026-05-22  0.090        35.1842  yahoo_finance
+# ...
+```
+
+> **Tip** : if Yahoo Finance is unavailable in your network (corporate proxy,
+> sandboxed CI), wrap the load in a `try/except` — the module already logs a
+> warning but still returns a usable synthetic curve.
+
+### 3.5 `VolSmile` and `VolatilitySurface`
+
+```python
+@dataclass
+class VolSmile:
+    T: float                 # time to expiry (years)
+    contract_code: str       # e.g. 'May26'
+    F: float                 # forward at this tenor
+    strikes: list[float]     # 9 strikes by default
+    vols: list[float]        # Black-76 lognormal vols
+    model: str = "black76"   # "black76" or "bachelier"
+```
+
+`VolatilitySurface` is a container of smiles indexed by maturity. It provides:
+
+- `add_smile(smile)` — append a smile (and invalidate the bilinear cache)
+- `vol(K, T) -> float` — bilinear interpolation in `(strike, maturity)` space
+- `to_dataframe() -> DataFrame` — long format (one row per `(T, K)`)
+
+```python
+v = surface.vol(K=32.0, T=0.50)        # interpolated lognormal vol
+df = surface.to_dataframe()             # for plotting / export
+```
+
+> The interpolator is built on first call to `.vol(...)` and re-cached
+> automatically when a new smile is appended.
+
+### 3.6 `VolatilitySurfaceBuilder`
+
+Builds a parametric TTF vol surface when no live option quotes are available.
+
+```python
+from ttf_market_data import VolatilitySurfaceBuilder
+
+builder = VolatilitySurfaceBuilder(
+    forward_curve=curve,
+    reference_date=date(2026, 4, 20),
+    n_strikes=9,
+)
+surface = builder.build()
+```
+
+Inputs (all optional with sensible defaults):
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `atm_vols` | `{1/12: 0.65, 2/12: 0.58, 3/12: 0.52, 6/12: 0.46, 9/12: 0.42, 1.0: 0.40, 2.0: 0.38}` | ATM lognormal vol per tenor |
+| `rr25` | `−0.03` per tenor | 25-delta risk-reversal (negative ⇒ put vol > call vol) |
+| `bf25` | `+0.015` per tenor | 25-delta butterfly (smile convexity) |
+
+For each tenor, the builder converts (ATM, RR25, BF25) into 25Δ call and 25Δ
+put vols, inverts those to strikes via `_delta_to_strike`, and interpolates the
+vols along the resulting strike grid in log-moneyness space:
+
+```
+σ_25c = ATM + 0.5 · RR25 + BF25
+σ_25p = ATM − 0.5 · RR25 + BF25
+```
+
+If the forward at a given tenor falls below `2 EUR/MWh`, the smile is tagged
+`model="bachelier"` so downstream code knows to switch pricing models.
+
+### 3.7 `SABRParams` and `MarketCalibration`
+
+```python
+@dataclass
+class SABRParams:
+    alpha: float   # initial vol level
+    beta: float    # CEV exponent (0.5 — typical for energy markets)
+    rho: float     # vol-spot correlation
+    nu: float      # vol-of-vol
+```
+
+`MarketCalibration` runs SABR (Hagan et al. 2002) on every Black-76 smile in
+the surface; Bachelier smiles are skipped (with a warning).
+
+```python
+from ttf_market_data import MarketCalibration
+
+calib = MarketCalibration(surface).calibrate_all()
+calib.to_dataframe()
+#       T   alpha  beta      rho      nu
+# 0  0.083  0.471  0.50  -0.214  0.521
+# 1  0.167  0.434  0.50  -0.198  0.488
+# ...
+```
+
+Beta is fixed at `0.5`. The optimiser is `scipy.optimize.minimize` with
+L-BFGS-B and bounds `alpha ∈ [1e-4, 5]`, `rho ∈ [−0.999, 0.999]`,
+`nu ∈ [1e-4, 5]`.
+
+### 3.8 Export utilities
+
+Three helpers serialise to both CSV and JSON. `path` is the **prefix without
+extension**; the helpers append `.csv` / `.json`.
+
+#### `export_forward_curve(curve, path)`
+
+Writes `path.csv` and `path.json`. The JSON wraps the records under a top-level
+`{ "reference_date": "...", "curve": [...] }` envelope.
+
+```python
+from ttf_market_data import export_forward_curve
+
+export_forward_curve(curve, "ttf_output/ttf_forward_curve")
+# -> ttf_output/ttf_forward_curve.csv
+# -> ttf_output/ttf_forward_curve.json
+```
+
+#### `export_vol_surface(surface, path)`
+
+Writes three files: `path.csv` (long format), `path_pivot.csv` (wide pivot,
+rows = `T`, columns = strike), and `path.json` (records under
+`{ "reference_date": "...", "surface": [...] }`).
+
+#### `export_sabr_params(calibration, path)`
+
+Writes `path.csv` and `path.json` with one row per calibrated tenor.
+
+#### `export_all(output_dir=".", reference_date=None, risk_free_rate=0.03)`
+
+Runs the full pipeline (forward curve → vol surface → SABR calibration) and
+writes everything to `output_dir`. Returns a `dict` with the three DataFrames
+for in-process use.
+
+```python
+from ttf_market_data import export_all
+from datetime import date
+
+dfs = export_all(output_dir="ttf_output", reference_date=date(2026, 4, 20))
+sorted(dfs.keys())
+# ['forward_curve', 'sabr_params', 'vol_surface']
+```
+
+This is the recommended one-shot entry point for the rest of the project —
+the dashboard, the spread pricer and the structures module all consume the
+JSON files written here.
+
+### 3.9 End-to-end example
+
+```python
+from datetime import date
+from ttf_market_data import (
+    TTFExpiryCalendar, TTFForwardCurve,
+    VolatilitySurfaceBuilder, MarketCalibration,
+)
+
+ref = date(2026, 4, 20)
+
+# 1. Calendar — next 6 active TTF contracts
+cal = TTFExpiryCalendar(ref)
+for c in cal.active_contracts(n=6):
+    print(f"{c.contract_code}  expiry={c.expiry_date}  T={c.T:.4f}y")
+
+# 2. Forward curve (Yahoo Finance, with synthetic fallback)
+curve = TTFForwardCurve(ref, risk_free_rate=0.03).load()
+print(curve.to_dataframe()[["contract_code", "T", "forward_price", "source"]])
+
+# 3. Vol surface (parametric, ATM term-structure + 25Δ smile)
+surface = VolatilitySurfaceBuilder(curve, ref).build()
+print(surface.vol(K=32.0, T=0.25))   # interpolated lognormal vol
+
+# 4. SABR calibration (per tenor)
+calib = MarketCalibration(surface).calibrate_all()
+print(calib.to_dataframe())
+```
 
 ---
 
