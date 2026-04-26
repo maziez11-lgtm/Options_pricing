@@ -6,6 +6,7 @@ This manual covers:
 - **Part 2.** [`black76_ttf.py`](#2-black76_ttfpy) — every function with worked examples
 - **Part 3.** [`ttf_market_data.py`](#3-ttf_market_datapy) — market data and vol surface
 - **Part 4.** [`ttf_hh_spread.py`](#4-ttf_hh_spreadpy) — TTF/HH spread option (Margrabe 1978)
+- **Part 5.** [`dashboard_jupyter.ipynb`](#5-dashboard_jupyteripynb) — section-by-section user guide
 
 > **Conventions used throughout the examples**
 > - TTF forward: `F = 30 EUR/MWh`
@@ -1156,6 +1157,225 @@ Verification on the demo case (`F_TTF = 9.4955`, `F_HH = 3.0`, `T = 180/365`,
 | `e^(-rT)·(F_TTF − F_HH)` | 6.352943 |
 
 PCP holds to better than `1e-8 USD/MMBtu`.
+
+---
+
+## 5. `dashboard_jupyter.ipynb`
+
+Interactive **Jupyter dashboard** built on top of the four pricing modules.
+Each section is a standalone widget panel: tweak the sliders/dropdowns and the
+prices, Greeks and charts re-render automatically.
+
+### 5.0 Launching the notebook
+
+```bash
+# from the project root
+pip install -r requirements.txt   # numpy, scipy, matplotlib, pandas,
+                                  # ipywidgets, jupyterlab
+jupyter lab dashboard_jupyter.ipynb
+```
+
+Then run the cells from top to bottom (`Shift + Enter`). Dependencies pulled
+in by the notebook:
+
+| Module | Used by |
+|---|---|
+| `black76_ttf` | Section 1 (Pricer), Section 5 (expiries) |
+| `structures_ttf` | Section 2 (multi-leg structures) |
+| `ttf_hh_spread` | Section 4 (Margrabe spread) |
+| `ipywidgets`, `matplotlib`, `pandas`, `numpy` | UI + plots + tables |
+
+> **Tip**: each section reads only its own widgets — you can edit / collapse
+> any one of them without breaking the others.
+
+### 5.1 Section 1 — Pricer (Black-76 / Bachelier)
+
+Single-leg European call/put pricer with full Greeks.
+
+**Inputs**
+
+| Widget | Description | Default |
+|---|---|---|
+| `Model` | `Black-76` (lognormal) or `Bachelier` (normal) | Black-76 |
+| `Forward (EUR/MWh)` | Underlying TTF forward `F` | 35.00 |
+| `Strike (EUR/MWh)` | Exercise price `K` | 35.00 |
+| `Maturity (years)` | `T`, ACT/365 | 0.25 |
+| `Rate (decimal)` | Risk-free rate `r` (annualised) | 0.03 |
+| `Vol (lognormal)` | Black-76 σ (visible only when `Model = Black-76`) | 0.50 |
+| `Vol (EUR/MWh)` | Bachelier σₙ (visible only when `Model = Bachelier`) | 10.00 |
+
+**Outputs**
+
+- Call and put premiums in EUR/MWh.
+- Full Greek block for both call and put: `delta`, `gamma`, `vega`,
+  `theta` (per calendar day), `rho` (per percentage point), `vanna`, `volga`.
+
+**Behaviour**
+
+- The vol slider auto-toggles between lognormal (Black-76) and normal
+  (Bachelier) when the model dropdown changes — only the relevant one is shown.
+- Recomputation is triggered on slider release (`continuous_update=False`),
+  so the panel stays responsive on slow links.
+- Internally calls `b76_call`, `b76_put`, `b76_greeks` (resp. `bach_*`) from
+  `black76_ttf.py`.
+
+### 5.2 Section 2 — Structures (10 multi-leg payoffs)
+
+Pricer + P&L chart for the standard option structures wrapped in
+`structures_ttf.py`. Black-76 only, fixed `r = 3 %`.
+
+**Available structures**
+
+| # | Structure | Strike inputs |
+|---|---|---|
+| 1 | Straddle | `K` |
+| 2 | Strangle | `K_put`, `K_call` |
+| 3 | Bull Call Spread | `K_lo`, `K_hi` |
+| 4 | Bear Put Spread | `K_lo`, `K_hi` |
+| 5 | Butterfly | `K_lo`, `K_mid`, `K_hi` |
+| 6 | Condor | `K1`, `K2`, `K3`, `K4` |
+| 7 | Collar | `K_put`, `K_call` |
+| 8 | Risk Reversal | `K_put`, `K_call` |
+| 9 | Calendar Spread | `K` (`T_far = T + 3 months`) |
+| 10 | Ratio Spread 1×2 | `K_lo`, `K_hi` |
+
+**Inputs**
+
+- `Structure` dropdown — picking a new structure resets the strike sliders to
+  sensible defaults around the forward (e.g. `F − 4, F, F + 4` for a butterfly).
+- `Forward (EUR/MWh)`, `Maturity (years)`, `Vol (lognormal)`.
+- 1 to 4 strike sliders `K1 … K4` whose **labels and visibility adapt** to the
+  selected structure.
+
+**Outputs**
+
+- **Net premium** in EUR/MWh, labelled `debit` if positive, `credit` if negative.
+- **Net Greeks**: `delta`, `gamma`, `vega`, `theta` (per calendar day).
+- **Breakevens** (forward levels at expiry where P&L = 0).
+- **Max profit** / **max loss** (`+inf` / `−inf` for unbounded structures).
+- **P&L chart at expiry** with:
+  - solid blue line = total payoff − net premium,
+  - dashed grey line = current forward,
+  - dotted red lines = breakevens,
+  - light green vertical lines = strikes,
+  - green/red shading = profit/loss zones.
+
+> **Tip**: Calendar Spread is the only structure that uses two maturities —
+> the slider drives `T_near`, while `T_far = T_near + 0.25 yr` is fixed inside
+> the dispatcher.
+
+### 5.3 Section 3 — Vol Surface (parametric, 3D)
+
+Parametric implied volatility surface, displayed as an interactive 3D
+`matplotlib` plot.
+
+**Model**
+
+ATM term structure plus a smile in log-moneyness:
+
+```
+atm(T)     = sigma_inf + delta_sigma · exp(−kappa · T)
+m(K, T)    = ln(K / F) / sqrt(T)
+sigma(K,T) = atm(T) + skew · m + wings · m²        (clipped to [0.01, 5.00])
+```
+
+The forward is held constant across the whole grid (a true forward curve
+could be plugged in via `ttf_market_data` later).
+
+**Inputs**
+
+| Widget | Meaning | Range |
+|---|---|---|
+| `Forward (EUR/MWh)` | `F` (constant across the grid) | 5 – 100 |
+| `sigma_inf (long ATM)` | long-end ATM vol | 0.10 – 1.00 |
+| `delta_sigma (short ATM)` | additional short-end ATM bump | 0.00 – 1.00 |
+| `kappa (decay)` | exponential decay rate of the bump | 0.1 – 8.0 |
+| `skew` | linear smile slope vs log-moneyness | −0.40 – +0.40 |
+| `wings (convexity)` | quadratic smile coefficient | 0.00 – 0.50 |
+| `range strikes (± %)` | strike grid half-width vs `F` | 10 % – 90 % |
+| `T max (years)` | longest maturity on the surface | 0.25 – 5.0 |
+
+**Outputs**
+
+- A 3D surface plot (axes: `K`, `T`, `σ`) with the `viridis` colormap and a
+  colourbar.
+- Two info lines below the chart: `ATM(T=0)`, `ATM(T=∞)`, the achieved vol
+  range and the grid size (default 35 strikes × 25 maturities).
+
+> **Tip**: a negative `skew` (default `−0.08`) reproduces the classic TTF
+> shape — OTM puts trade richer than OTM calls. Increase `wings` to fatten
+> both tails.
+
+### 5.4 Section 4 — TTF / Henry Hub Spread (Margrabe)
+
+UI wrapper around `ttf_hh_spread.spread_price` (see Part 4). Prices and
+plots both the **payoff at expiry** and the **current option value** along the
+TTF axis, with a secondary x-axis in EUR/MWh.
+
+**Inputs**
+
+| Widget | Description | Default |
+|---|---|---|
+| `Option` | `call` or `put` | call |
+| `Forward TTF (EUR/MWh)` | TTF forward in EUR/MWh | 35.00 |
+| `Forward HH (USD/MMBtu)` | Henry Hub forward in USD/MMBtu | 3.50 |
+| `Vol TTF (lognormal)` | σ_TTF | 0.50 |
+| `Vol HH (lognormal)` | σ_HH | 0.45 |
+| `Correlation rho` | TTF/HH correlation ρ | 0.50 |
+| `Maturity (years)` | `T`, ACT/365 | 0.50 |
+| `FX EUR/USD` | spot FX used to convert TTF to USD/MMBtu | 1.080 |
+| `Rate USD` | USD risk-free rate | 0.04 |
+| `Market price (USD/MMBtu)` | optional input for implied correlation | 0.00 |
+
+**Outputs**
+
+- TTF forward shown in **both** EUR/MWh and USD/MMBtu, plus the spread vol
+  `σ_spread = √(σ_TTF² + σ_HH² − 2·ρ·σ_TTF·σ_HH)`.
+- Premium in **both** USD/MMBtu and EUR/MWh.
+- All Margrabe Greeks: `delta_ttf`, `delta_hh`, `gamma_ttf`,
+  `vega_ttf`, `vega_hh`, `vega_rho`, `theta` per calendar day.
+- **Implied correlation**: if `Market price > 0`, the panel solves
+  `implied_correlation` and prints the result. If the quote is outside the
+  achievable corridor, an explanatory error is shown instead.
+- A **payoff vs option-value chart**:
+  - blue solid line = payoff at expiry vs `F_TTF` (USD/MMBtu),
+  - orange dashed line = current Margrabe value at the chosen `T`,
+  - vertical reference lines at `F_TTF` (grey) and `F_HH` (red),
+  - top x-axis = `F_TTF` translated back into EUR/MWh.
+
+### 5.5 Section 5 — Expiry Dates (ICE Endex Dutch TTF)
+
+Calendar viewer for the official ICE Endex TTF option expiries.
+
+**Rule**: `expiry = (1st of delivery month) − 5 calendar days`; if not a
+business day, roll back to the previous business day (NL + UK holidays); if
+equal to the futures LTD, roll back one extra business day.
+
+**Inputs**
+
+| Widget | Description | Default |
+|---|---|---|
+| `Number of contracts` | how many forthcoming expiries to display | 12 |
+| `Reference` | reference date for the lookup | today |
+
+**Outputs**
+
+A `pandas` DataFrame with one row per contract:
+
+| Column | Meaning |
+|---|---|
+| `Contract` | ICE code (`TTFK26`, `TTFM26`, …) |
+| `Delivery` | delivery month (`May-26`, `Jun-26`, …) |
+| `Option expiry` | ISO date of the option expiry |
+| `Days to expiry` | `(expiry − reference) + 1` calendar days |
+| `T (years)` | `T = Days / 365` |
+| `Futures LTD` | last trading day of the underlying future |
+
+A **horizontal bar chart** displays `T (years)` for each contract, annotated
+with the calendar-day count.
+
+> **Backed by**: `ttf_next_expiries`, `ttf_time_to_expiry`,
+> `_ttf_futures_ltd` from `black76_ttf.py`.
 
 ---
 
