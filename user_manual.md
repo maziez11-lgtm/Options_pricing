@@ -2,8 +2,9 @@
 
 This manual covers:
 
-1. [Introduction](#1-introduction) — TTF options, Black-76 vs Bachelier, Greeks
-2. [`black76_ttf.py`](#2-black76_ttfpy) — every function with worked examples
+- **Part 1.** [Introduction](#1-introduction) — TTF options, Black-76 vs Bachelier, Greeks
+- **Part 2.** [`black76_ttf.py`](#2-black76_ttfpy) — every function with worked examples
+- **Part 4.** [`ttf_hh_spread.py`](#4-ttf_hh_spreadpy) — TTF/HH spread option (Margrabe 1978)
 
 > **Conventions used throughout the examples**
 > - TTF forward: `F = 30 EUR/MWh`
@@ -12,6 +13,7 @@ This manual covers:
 > - Bachelier volatility: `sigma_n = 15 EUR/MWh` (≈ `F · sigma`)
 > - Maturity: `T = 0.25` year (3 months, ACT/365)
 > - Risk-free rate: `r = 0.02` (2%)
+> - Spread (Part 4): `F_HH = 3 USD/MMBtu`, `fx = 1.08`, `σ_TTF = 60%`, `σ_HH = 50%`, `ρ = 0.35`, `r_usd = 0.045`
 >
 > Numerical values shown are rounded to 4 decimal places.
 
@@ -492,6 +494,324 @@ Defaults for `K_lo` / `K_hi`: `[F − 10·σ_n·√T, F + 10·σ_n·√T]`.
 
 ---
 
+## 4. `ttf_hh_spread.py`
+
+A pricer for **exchange options** on the TTF − HH basis using **Margrabe's
+formula** (1978). The module covers:
+
+- Unit conversion EUR/MWh ⇄ USD/MMBtu (`1 MWh = 3.412142 MMBtu`)
+- Margrabe call/put on `(F_TTF, F_HH)` in USD/MMBtu
+- All first-order Greeks plus `vega_ρ` (sensitivity to correlation)
+- Implied correlation solver (Brent, monotone in ρ)
+- Correlation- and vol-sensitivity tables
+- A formatted summary printer
+
+> **Conventions for this section**
+> - TTF forward: `F_ttf_eur = 30 EUR/MWh`
+> - Henry Hub forward: `F_hh = 3 USD/MMBtu`
+> - EUR/USD: `fx_eurusd = 1.08`
+> - Vols: `σ_TTF = 0.60` (60%), `σ_HH = 0.50` (50%)
+> - Correlation: `ρ = 0.35`
+> - USD risk-free: `r_usd = 0.045`
+
+### 4.1 Background — exchange options and Margrabe
+
+For two log-normal forwards `F_TTF`, `F_HH` (both in **USD/MMBtu**) with vols
+`σ_TTF`, `σ_HH` and instantaneous correlation `ρ`, the **spread vol** is:
+
+```
+σ_s = √(σ_TTF² + σ_HH² − 2·ρ·σ_TTF·σ_HH)
+```
+
+The price of the exchange call (Margrabe, 1978) is:
+
+```
+C = e^(-rT) · [F_TTF · N(d₁) − F_HH · N(d₂)]
+P = e^(-rT) · [F_HH · N(−d₂) − F_TTF · N(−d₁)]
+
+with  d₁ = [ln(F_TTF / F_HH) + ½·σ_s²·T] / (σ_s·√T)
+      d₂ = d₁ − σ_s·√T
+```
+
+Intuition:
+
+- **ρ → +1** (assets co-move) → `σ_s ↓` → option **cheaper**
+- **ρ → −1** (assets diverge) → `σ_s ↑` → option **more expensive**
+- The implied correlation backed out of a market quote is the market's view of
+  TTF/HH co-movement.
+
+Typical LNG-driven regime (2022–2026):
+
+| Quantity | Range |
+|---|---|
+| TTF forward | 25 – 45 EUR/MWh (≈ 8 – 14 USD/MMBtu after FX) |
+| Henry Hub forward | 2 – 5 USD/MMBtu |
+| Spread TTF − HH | 5 – 12 USD/MMBtu (LNG netback drives convergence) |
+| Implied correlation | ≈ 0.20 – 0.55 |
+
+### 4.2 Constants and unit conversions
+
+#### `MWH_TO_MMBTU = 3.412142`
+
+Exact energy equivalence factor: `1 MWh = 3.412142 MMBtu`.
+
+#### `ttf_eur_to_usd(F_ttf_eur, fx_eurusd) -> float`
+
+Converts a TTF forward from EUR/MWh to USD/MMBtu:
+`F_usd = F_eur · fx_eurusd / 3.412142`.
+
+```python
+from ttf_hh_spread import ttf_eur_to_usd
+
+ttf_eur_to_usd(F_ttf_eur=30.0, fx_eurusd=1.08)
+# -> 9.4955   USD/MMBtu
+```
+
+#### `ttf_usd_to_eur(F_ttf_usd, fx_eurusd) -> float`
+
+Inverse conversion.
+
+```python
+from ttf_hh_spread import ttf_usd_to_eur
+
+ttf_usd_to_eur(F_ttf_usd=10.0, fx_eurusd=1.08)
+# -> 31.5939   EUR/MWh
+```
+
+#### `spread_usd_to_eur(spread_usd, fx_eurusd) -> float`
+
+Converts any USD/MMBtu spread or option premium back into EUR/MWh.
+
+```python
+from ttf_hh_spread import spread_usd_to_eur
+
+spread_usd_to_eur(spread_usd=1.0, fx_eurusd=1.08)
+# -> 3.1594    EUR/MWh
+```
+
+### 4.3 Margrabe pricing — core
+
+The functions in this section work in **USD/MMBtu** for both forwards. Use them
+when the TTF forward has already been converted (or for unit testing).
+
+#### `margrabe_price(F_ttf, F_hh, T, r, sigma_ttf, sigma_hh, rho, option_type='call') -> float`
+
+```python
+from ttf_hh_spread import margrabe_price
+
+# ATM-like spread: F_TTF ≈ F_HH (USD/MMBtu)
+margrabe_price(F_ttf=9.50, F_hh=9.00, T=0.25, r=0.045,
+               sigma_ttf=0.60, sigma_hh=0.50, rho=0.35,
+               option_type="call")
+# -> 1.4129   USD/MMBtu
+
+margrabe_price(9.50, 9.00, 0.25, 0.045, 0.60, 0.50, 0.35, "put")
+# -> 0.9185   USD/MMBtu
+```
+
+> **Edge cases**: when `T ≤ 0` or `σ_s < 1e-12`, the function returns the
+> discounted intrinsic `e^(-rT)·max(F_TTF − F_HH, 0)` (call) or its symmetric
+> counterpart (put).
+
+Raises `ValueError` if `option_type` ∉ `{'call', 'put'}`.
+
+#### `margrabe_greeks(F_ttf, F_hh, T, r, sigma_ttf, sigma_hh, rho, option_type='call') -> SpreadGreeks`
+
+All first-order sensitivities returned in a single `SpreadGreeks` dataclass:
+
+| Field | Definition | Unit |
+|---|---|---|
+| `delta_ttf` | `∂Price/∂F_TTF`   | dimensionless (∈ [0,1] for call) |
+| `delta_hh`  | `∂Price/∂F_HH`    | dimensionless (∈ [−1,0] for call) |
+| `gamma_ttf` | `∂²Price/∂F_TTF²` | per (USD/MMBtu) |
+| `vega_ttf`  | `∂Price/∂σ_TTF`   | USD/MMBtu per 1.00 of vol |
+| `vega_hh`   | `∂Price/∂σ_HH`    | USD/MMBtu per 1.00 of vol |
+| `vega_rho`  | `∂Price/∂ρ`       | USD/MMBtu per unit correlation |
+| `theta`     | 1-day finite-difference decay | USD/MMBtu per calendar day |
+
+```python
+from ttf_hh_spread import margrabe_greeks
+
+g = margrabe_greeks(F_ttf=9.50, F_hh=9.00, T=0.25, r=0.045,
+                    sigma_ttf=0.60, sigma_hh=0.50, rho=0.35,
+                    option_type="call")
+g.delta_ttf   # +0.6219
+g.delta_hh    # -0.4995
+g.gamma_ttf   # +0.1244
+g.vega_ttf    # +1.1928   (per 1.00 of vol)
+g.vega_hh     # +0.8139
+g.vega_rho    # -0.8420   (negative: ↑ρ ⇒ ↓price)
+g.theta       # -0.0060   (per calendar day)
+```
+
+> **Vega convention**: per unit of decimal vol (1.00 = 100%). Divide by 100 for
+> the "per 1 vol point" market convention.
+
+> **`vega_rho` sign**: a higher `ρ` reduces `σ_s`, hence reduces the option
+> premium. `vega_rho` is therefore **negative** for both call and put.
+
+> **Theta**: computed by 1-day finite difference (`T → T − 1/365`), so already
+> expressed per **calendar day**. Negative for a long position with positive
+> time value.
+
+### 4.4 Full pricer (TTF in EUR/MWh)
+
+End-to-end entry point. It accepts TTF in **EUR/MWh**, performs the FX and
+energy-unit conversion internally, and returns a `SpreadResult` carrying the
+prices in **both** USD/MMBtu and EUR/MWh, plus all the Greeks.
+
+#### `spread_price(F_ttf_eur, F_hh, fx_eurusd, T, r_usd, sigma_ttf, sigma_hh, rho, option_type='call', reference=None) -> SpreadResult`
+
+```python
+from ttf_hh_spread import spread_price
+
+res = spread_price(
+    F_ttf_eur=30.0, F_hh=3.0, fx_eurusd=1.08,
+    T=0.25, r_usd=0.045,
+    sigma_ttf=0.60, sigma_hh=0.50, rho=0.35,
+    option_type="call",
+)
+
+res.F_ttf_usd      # 9.4955
+res.sigma_spread   # 0.6325   (= 63.25%)
+res.price          # 6.4229   USD/MMBtu
+res.price_eur      # 20.2924  EUR/MWh
+res.greeks.delta_ttf
+```
+
+The `T` argument may also be a **TTF contract code** (`"TTFM26"`, `"Jun26"`,
+`"Mar2026"`); it is then resolved via `t_from_contract` from `black76_ttf.py`.
+
+```python
+from datetime import date
+from ttf_hh_spread import spread_price
+
+res = spread_price(
+    F_ttf_eur=30.0, F_hh=3.0, fx_eurusd=1.08,
+    T="TTFM26", r_usd=0.045,
+    sigma_ttf=0.60, sigma_hh=0.50, rho=0.35,
+    option_type="call",
+    reference=date(2026, 4, 1),
+)
+# T          -> 0.1425   (52 days / 365)
+# price      -> 6.4540   USD/MMBtu
+# price_eur  -> 20.3907  EUR/MWh
+```
+
+The `SpreadResult` dataclass also carries the normalised inputs (`F_ttf_eur`,
+`F_ttf_usd`, `F_hh`, `fx_eurusd`, `sigma_ttf`, `sigma_hh`, `rho`,
+`sigma_spread`, `T`, `r_usd`, `option_type`) for later inspection.
+
+### 4.5 Implied correlation
+
+Brent solver, `xtol = 1e-8`, max 300 iterations. The premium is
+**monotone-decreasing in ρ**, so the bracket always converges if the market
+price lies inside the achievable corridor.
+
+#### `implied_correlation(market_price, F_ttf, F_hh, T, r, sigma_ttf, sigma_hh, option_type='call', rho_lo=-0.9999, rho_hi=0.9999) -> float`
+
+```python
+from ttf_hh_spread import margrabe_price, implied_correlation
+
+# Price an ATM spread at ρ = 0.5, then back out ρ from the price
+mp = margrabe_price(9.50, 9.50, 0.25, 0.045, 0.60, 0.50, 0.50, "call")
+# -> 1.0399
+
+implied_correlation(mp,
+                    F_ttf=9.50, F_hh=9.50,
+                    T=0.25, r=0.045,
+                    sigma_ttf=0.60, sigma_hh=0.50,
+                    option_type="call")
+# -> 0.5000
+```
+
+Raises `ValueError` if `market_price` lies outside the achievable corridor
+`[price@ρ=rho_hi, price@ρ=rho_lo]`. The error message reports the bounds —
+typically a quote below this corridor signals a price below intrinsic.
+
+### 4.6 Sensitivity helpers
+
+#### `rho_sensitivity(F_ttf, F_hh, T, r, sigma_ttf, sigma_hh, option_type='call', rhos=None) -> list[(rho, price)]`
+
+Default ρ-grid: `[-0.9, -0.7, -0.5, -0.3, -0.1, 0.0, 0.1, 0.3, 0.5, 0.7, 0.9]`.
+
+```python
+from ttf_hh_spread import rho_sensitivity
+
+rho_sensitivity(F_ttf=9.50, F_hh=9.00, T=0.25, r=0.045,
+                sigma_ttf=0.60, sigma_hh=0.50,
+                option_type="call",
+                rhos=[-0.5, 0.0, 0.35, 0.7])
+# -> [(-0.5, 1.9821), (0.0, 1.6765), (0.35, 1.4129), (0.7, 1.0651)]
+```
+
+The price is **monotone-decreasing in ρ**, as expected for an exchange option.
+
+#### `vol_sensitivity(F_ttf, F_hh, T, r, sigma_ttf, sigma_hh, rho, option_type='call') -> dict`
+
+One-way ±5 vol-point bumps for each of `σ_TTF`, `σ_HH`, plus a ±0.10 bump on
+ρ — useful for a quick risk dashboard.
+
+```python
+from ttf_hh_spread import vol_sensitivity
+
+vol_sensitivity(F_ttf=9.50, F_hh=9.00, T=0.25, r=0.045,
+                sigma_ttf=0.60, sigma_hh=0.50, rho=0.35,
+                option_type="call")
+# {'base':        1.4129,
+#  'σ_ttf +5%':   1.4744,
+#  'σ_ttf −5%':   1.3553,
+#  'σ_hh  +5%':   1.4563,
+#  'σ_hh  −5%':   1.3751,
+#  'ρ     +0.10': 1.3253,
+#  'ρ     −0.10': 1.4942}
+```
+
+### 4.7 Display helper
+
+#### `print_summary(res: SpreadResult) -> None`
+
+Pretty-prints a full pricing report (underlyings, vols, premiums in
+USD/MMBtu **and** EUR/MWh, all Greeks, and Vega in the "per 1% vol move"
+market convention).
+
+```python
+from ttf_hh_spread import spread_price, print_summary
+
+res = spread_price(30.0, 3.0, 1.08,
+                   T=180/365, r_usd=0.045,
+                   sigma_ttf=0.60, sigma_hh=0.50, rho=0.35,
+                   option_type="call")
+print_summary(res)
+# ════════════════════════════════════════════════════════════════
+#   TTF / Henry Hub Spread Option — CALL
+# ════════════════════════════════════════════════════════════════
+#   ...
+#   Option premium   :   6.3563 USD/MMBtu
+#   Option premium   :  20.0821 EUR/MWh
+#   ...
+```
+
+### 4.8 Put-call parity
+
+For Margrabe exchange options, parity reads:
+
+```
+C − P = e^(-rT) · (F_TTF − F_HH)
+```
+
+Verification on the demo case (`F_TTF = 9.4955`, `F_HH = 3.0`, `T = 180/365`,
+`r = 0.045`, `σ_TTF = 0.60`, `σ_HH = 0.50`, `ρ = 0.35`):
+
+| Side | Value (USD/MMBtu) |
+|---|---|
+| `C − P` | 6.352943 |
+| `e^(-rT)·(F_TTF − F_HH)` | 6.352943 |
+
+PCP holds to better than `1e-8 USD/MMBtu`.
+
+---
+
 ## Appendix A — Reference values (3 months, ATM)
 
 With `F = 30 EUR/MWh, K = 30, T = 0.25, r = 0.02`:
@@ -503,3 +823,24 @@ With `F = 30 EUR/MWh, K = 30, T = 0.25, r = 0.02`:
 
 Theoretical `C − P` = `e^(-0.02·0.25)·(30 − 30) = 0`. Verified on both models
 (difference < 1e-12 EUR/MWh).
+
+---
+
+## Appendix B — Reference values for the TTF/HH spread (Margrabe)
+
+With `F_ttf_eur = 30 EUR/MWh`, `F_hh = 3 USD/MMBtu`, `fx = 1.08`,
+`σ_TTF = 0.60`, `σ_HH = 0.50`, `ρ = 0.35`, `r_usd = 0.045`, `T = 180 / 365`:
+
+| Quantity | Value | Unit |
+|---|---|---|
+| `F_ttf_usd` | 9.4955 | USD/MMBtu |
+| Spread `F_TTF − F_HH` | +6.4955 | USD/MMBtu |
+| `σ_spread` | 63.25% | — |
+| Call premium | 6.3563 | USD/MMBtu |
+| Call premium | 20.0821 | EUR/MWh |
+| Put premium | 0.0034 | USD/MMBtu |
+| `Δ_TTF` (call) | +0.9757 | — |
+| `Δ_HH` (call) | −0.9694 | — |
+
+PCP check: `C − P = 6.352943 = e^(-rT)·(F_TTF − F_HH)`, verified to
+`< 1e-8 USD/MMBtu`.
