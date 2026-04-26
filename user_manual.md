@@ -7,6 +7,7 @@ This manual covers:
 - **Part 3.** [`ttf_market_data.py`](#3-ttf_market_datapy) — market data and vol surface
 - **Part 4.** [`ttf_hh_spread.py`](#4-ttf_hh_spreadpy) — TTF/HH spread option (Margrabe 1978)
 - **Part 5.** [`dashboard_jupyter.ipynb`](#5-dashboard_jupyteripynb) — section-by-section user guide
+- **Part 6.** [Financial glossary](#6-financial-glossary) — every term used in the project
 
 > **Conventions used throughout the examples**
 > - TTF forward: `F = 30 EUR/MWh`
@@ -1376,6 +1377,226 @@ with the calendar-day count.
 
 > **Backed by**: `ttf_next_expiries`, `ttf_time_to_expiry`,
 > `_ttf_futures_ltd` from `black76_ttf.py`.
+
+---
+
+## 6. Financial glossary
+
+Every market, model, Greek, structure and numerical convention used in the
+project, grouped by topic. Cross-references in *italics* point to other
+glossary entries.
+
+### 6.1 Markets and underlyings
+
+- **TTF** (*Title Transfer Facility*) — Dutch virtual natural gas hub operated
+  by Gasunie Transport Services. The European benchmark for natural gas.
+- **Henry Hub (HH)** — Physical natural gas pipeline interconnection in
+  Erath, Louisiana. The US benchmark, settlement reference for NYMEX natural
+  gas futures.
+- **ICE Endex** — Exchange listing the *TTF* futures and options. Sets the
+  official expiry calendar (Dutch + UK holiday rules).
+- **Forward** — Agreed price today for delivery on a future date. Notation
+  `F`. Implicitly already includes carry and interest, hence Black-76 prices
+  options on `F` rather than on a spot price.
+- **Future / Futures contract** — Exchange-listed, marked-to-market version
+  of a forward. One TTF futures contract = physical delivery over a given
+  delivery month.
+- **Delivery month** — The calendar month over which a TTF futures contract
+  delivers gas (e.g. `Jun26` → June 2026).
+- **LTD** (*Last Trading Day*) — The last business day on which the future
+  itself can be traded. The TTF option expires **before** the futures LTD.
+- **LNG** (*Liquefied Natural Gas*) — Cross-basin transportable form of
+  natural gas. LNG flows between TTF and HH drive the spread vol via the
+  *netback* relationship.
+- **Netback** — Arbitrage-style equality between two regional prices net of
+  liquefaction, shipping and regasification costs. Drives convergence of TTF
+  and HH and therefore the *implied correlation* on the spread.
+
+### 6.2 Option mechanics
+
+- **Option** — Right (without the obligation) to transact an underlying at a
+  fixed price.
+- **Call** — Option to **buy** the underlying at strike `K`. Payoff at
+  expiry: `max(F_T − K, 0)`.
+- **Put** — Option to **sell** the underlying at strike `K`. Payoff at
+  expiry: `max(K − F_T, 0)`.
+- **European style** — Exercise allowed **only at expiry**. The whole
+  library assumes European options.
+- **American style** — Exercise allowed at any time up to expiry (not used
+  here).
+- **Strike** (`K`) — Pre-agreed exercise price.
+- **Maturity / Expiry** (`T`) — Date / remaining time at which the option
+  can be exercised. Expressed in years (*ACT/365*).
+- **Premium** — Price paid for the option (in EUR/MWh or USD/MMBtu).
+- **Debit / Credit** — A multi-leg structure with a *positive* net premium
+  (cost) is a *debit*; with a *negative* net premium (proceeds) it is a
+  *credit*.
+- **Intrinsic value** — Immediate exercise value: `max(F − K, 0)` (call) or
+  `max(K − F, 0)` (put). What an option would be worth if expiry were now.
+- **Time value** — `Premium − Intrinsic`. Positive while *T > 0*.
+- **ATM** (*At-The-Money*) — `K = F`.
+- **ITM** (*In-The-Money*) — Call: `K < F`. Put: `K > F`. Positive intrinsic.
+- **OTM** (*Out-of-The-Money*) — Call: `K > F`. Put: `K < F`. Zero intrinsic.
+- **Moneyness** — Generic ratio describing the relationship between `K` and
+  `F`. *Log-moneyness* `m = ln(K / F) / √T` is used by the vol smile.
+- **Payoff** — Cashflow at expiry as a function of the terminal forward
+  `F_T`.
+- **P&L at expiry** — Payoff *net of the premium paid*, used in
+  *Section 2* of the dashboard.
+- **Breakeven** — Forward level at expiry at which net P&L = 0.
+- **Put-call parity (PCP)** — Model-free identity:
+  `C − P = e^(−rT) · (F − K)`. Holds for both Black-76 and Bachelier; the
+  Margrabe analogue is `C − P = e^(−rT) · (F_TTF − F_HH)`.
+
+### 6.3 Pricing models
+
+- **Black-Scholes (1973)** — Foundational lognormal model for stock options
+  with continuous dividends.
+- **Black-76 (1976)** — Adaptation of Black-Scholes for options on
+  **forwards** (no spot, no carry):
+  `C = e^(−rT)·[F·N(d₁) − K·N(d₂)]` with
+  `d₁ = [ln(F/K) + ½σ²T] / (σ√T)`, `d₂ = d₁ − σ√T`.
+  Default model in this project for `F ≫ 0`.
+- **Bachelier (1900)** — Normal (arithmetic) Brownian-motion model:
+  `dF = σₙ · dW`. Allows **negative forwards**, hence the right model for
+  TTF in crisis or for spreads.
+- **Margrabe (1978)** — Closed-form pricer for an *exchange option* on two
+  log-normal forwards. See *Spread vol*.
+- **Risk-neutral measure** — Probability measure under which discounted
+  forwards are martingales. All pricers in the library evaluate
+  expectations under that measure.
+- **Discount factor (DF)** — `e^(−rT)`. Multiplies the forward expectation
+  to convert it into a present value.
+- **Risk-free rate** (`r`) — Annualised continuously compounded rate.
+  Decimal (`0.02 = 2 %`).
+- **No-arbitrage bounds** — A call price must lie in `[max(0, e^(−rT)(F−K)), e^(−rT)·F]`.
+  The implied-vol solvers raise `ValueError` if a quote breaches them.
+- **N(·) / Φ(·)** — Standard-normal CDF.
+- **φ(·) / n(·)** — Standard-normal PDF.
+
+### 6.4 The Greeks
+
+Sensitivities of the option price `V` with respect to its inputs.
+
+- **Delta (Δ)** — `∂V / ∂F`. Hedge ratio in forward units. Discounted by
+  `e^(−rT)` here. `Δ_call − Δ_put = e^(−rT)`.
+- **Gamma (Γ)** — `∂²V / ∂F²`. Convexity in the forward; identical for call
+  and put. Peaks ATM and decays toward expiry.
+- **Vega (ν)** — `∂V / ∂σ`. Sensitivity to volatility. Reported here per
+  unit (1.00 = 100 %) of vol; divide by 100 for the market "per 1 vol point"
+  convention.
+- **Theta (Θ)** — `∂V / ∂t`. Time decay. Reported **per calendar day**.
+  Negative for a long option.
+- **Rho (ρ)** — `∂V / ∂r`. Sensitivity to the risk-free rate. Reported per
+  *percentage point* of rate change.
+- **Vanna** — `∂²V / (∂F ∂σ) = ∂Δ / ∂σ`. Cross-derivative used in
+  skew-aware risk management. Zero ATM under Bachelier.
+- **Volga** (also *Vomma*) — `∂²V / ∂σ²`. Vol convexity, drives the
+  smile-roll risk.
+- **Charm** / **Color** / **Speed** — Higher-order Greeks not used here but
+  occasionally referenced in the literature.
+- **Net Greeks** — Greeks aggregated across the legs of a multi-leg
+  structure (Section 2 of the dashboard).
+
+### 6.5 Volatility
+
+- **Volatility (σ)** — Standard deviation of returns of the underlying.
+- **Lognormal vol** — σ used in *Black-76*; dimensionless, decimal
+  (`0.50 = 50 %`).
+- **Normal vol** (σₙ) — σ used in *Bachelier*; absolute units, EUR/MWh.
+  Rule of thumb: `σₙ ≈ F · σ` for matching ATM prices.
+- **Implied volatility (IV)** — Vol level that, plugged into the model,
+  reproduces a quoted market price. Solved by *Brent's method* in the
+  library (`b76_implied_vol`, `bach_implied_vol`).
+- **ATM volatility** — IV at `K = F`.
+- **Smile** — Convex shape of `IV(K)` as a function of strike (or
+  log-moneyness).
+- **Skew** — Slope of the smile. The TTF smile is typically negatively
+  skewed (OTM puts trade richer than OTM calls).
+- **Wings** — Quadratic / convex contribution to the smile, fattening the
+  tails on both sides.
+- **Term structure** — Variation of ATM IV with maturity `T`.
+- **Vol surface** — Two-dimensional `IV(K, T)`. Section 3 of the dashboard
+  builds a parametric one:
+  `σ(K,T) = sigma_inf + Δσ·exp(−κT) + skew·m + wings·m²`.
+- **25-delta / 50-delta / 75-delta strike** — Strike whose call delta
+  equals the given target. Standard quote convention; obtained via
+  `b76_delta_to_strike` / `bach_delta_to_strike`.
+- **Risk reversal** — Difference of IVs between the 25Δ call and the 25Δ
+  put; measures *skew*. Also the name of a multi-leg structure (see 6.7).
+
+### 6.6 Spread and correlation
+
+- **Spread** — Difference of two related prices. Here `F_TTF − F_HH` after
+  unit conversion to USD/MMBtu.
+- **Spread option** — Option whose payoff depends on a spread, e.g.
+  `max(F_TTF − F_HH, 0)`.
+- **Exchange option** — Option to swap one asset for another at expiry,
+  i.e. `max(F₁ − F₂, 0)`. Margrabe (1978) gives a closed form.
+- **Margrabe formula** — Closed-form price of an exchange option:
+  `C = e^(−rT)·[F₁·N(d₁) − F₂·N(d₂)]` with
+  `d₁ = [ln(F₁/F₂) + ½σₛ²T] / (σₛ√T)`, `d₂ = d₁ − σₛ√T`.
+- **Spread vol (σₛ)** — Effective lognormal vol of the spread:
+  `σₛ = √(σ₁² + σ₂² − 2·ρ·σ₁·σ₂)`. Used inside Margrabe.
+- **Correlation (ρ)** — Instantaneous correlation between the two log-forwards.
+  ρ → +1 → assets co-move → spread vol shrinks → option cheaper.
+- **Implied correlation** — ρ backed out of a market spread-option price
+  via `implied_correlation` (Brent on a monotone function of ρ).
+- **MWh / MMBtu** — Energy units. `1 MWh = 3.412142 MMBtu`. TTF quotes in
+  EUR/MWh, HH in USD/MMBtu, hence the conversion in
+  `ttf_eur_to_usd` / `ttf_usd_to_eur`.
+- **FX EUR/USD** — Exchange rate (e.g. `1.08`). Combined with the energy
+  conversion to compare TTF and HH on the same axis.
+
+### 6.7 Multi-leg structures
+
+Eleven structures bundled by `structures_ttf.py` and exposed in Section 2 of
+the dashboard.
+
+- **Straddle** — Long call + long put at the **same** strike `K`. Pure
+  vol bet, max profit unbounded, max loss = total premium.
+- **Strangle** — Long OTM put `K_put` + long OTM call `K_call`. Cheaper
+  than a straddle, requires a wider move to break even.
+- **Bull Call Spread** — Long call `K_lo` + short call `K_hi`. Bounded
+  bullish payoff for a *debit*.
+- **Bear Put Spread** — Long put `K_hi` + short put `K_lo`. Bounded
+  bearish payoff for a *debit*.
+- **Butterfly** — Long `K_lo` + short 2 × `K_mid` + long `K_hi` (all calls
+  or all puts). Pin-risk play, max profit at `K_mid`.
+- **Condor** — Four-strike generalisation of the butterfly:
+  long `K1` + short `K2` + short `K3` + long `K4`. Wide pin zone.
+- **Collar** — Long put `K_put` + short call `K_call`. Caps both upside
+  and downside, near-zero premium for a hedger of the underlying.
+- **Risk Reversal** — Short put `K_put` + long call `K_call`. Synthetic
+  long forward; price reflects the *skew*.
+- **Calendar Spread** — Short near-dated option + long far-dated option at
+  the same strike. Sells short-dated theta against long-dated vega.
+- **Ratio Spread (1×2)** — Long 1 × `K_lo` + short 2 × `K_hi`. Cheap or
+  even *credit* directional bet with naked-leg risk past `K_hi`.
+- **Net premium** — Sum of premiums across the legs (sign-aware).
+- **Breakevens / Max profit / Max loss** — Reported by the dashboard for
+  each structure (`+inf` / `−inf` for unbounded structures).
+
+### 6.8 Conventions and numerics
+
+- **ACT/365** — Day-count convention used throughout: `T = days / 365`,
+  including the reference day.
+- **Business day** — Mon–Fri excluding NL + UK holidays. Implemented in
+  `ttf_is_business_day` (1 January, Good Friday, Easter Monday, 1 May,
+  25 and 26 December).
+- **ICE month codes** — `F G H J K M N Q U V X Z` for January–December.
+  Combined with a 2-digit year: `TTFM26` = June 2026.
+- **Reference date** — Date from which `T` is measured. Defaults to
+  `date.today()` in the helpers.
+- **Brent's method** — Bracketing root-finder used for *implied volatility*
+  and *implied correlation* (`xtol = 1e-8`, max 300 iterations).
+- **Finite-difference Theta** — Theta is computed by
+  `V(T − 1/365) − V(T)` rather than analytically, to stay consistent
+  across the four pricers.
+- **Sign convention** — Greeks reported with their natural sign: long call
+  Δ > 0, long option Θ < 0, etc.
+- **Numerical accuracy** — All round-trip identities (PCP, IV → price → IV,
+  spread PCP) are verified to better than `1e-8` in the built-in tests.
 
 ---
 
