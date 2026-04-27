@@ -210,9 +210,11 @@ def ttf_time_to_expiry(
     contract_year: int,
     reference: date | None = None,
 ) -> float:
-    """ACT/365 time to TTF option expiry (start-of-day, today included).
+    """Raw calendar-day time to TTF option expiry, divided by 365.
 
-    Returns 0 if the expiry is in the past.
+    t = (expiry_date - today).days / 365
+
+    No business-day adjustment, no holiday removal, no day-count convention.
 
     Parameters
     ----------
@@ -222,7 +224,7 @@ def ttf_time_to_expiry(
     """
     ref = reference or date.today()
     exp = ttf_expiry_date(contract_month, contract_year)
-    return max((exp - ref).days + 1, 0) / 365.0
+    return (exp - ref).days / 365
 
 
 _MONTH_CODES_ICE = "FGHJKMNQUVXZ"
