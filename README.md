@@ -18,7 +18,7 @@ This library implements industry-standard models for energy derivatives:
 |--------|-----------------|
 | `black76_ttf.py` | Black-76 and Bachelier pricing, Greeks, implied vol, contract-code parsing |
 | `ttf_market_data.py` | Forward curve, vol surface construction, SABR calibration, JSON/CSV export |
-| `ttf_time.py` | Time-to-maturity utilities, day-count conventions, TARGET2 holiday calendar |
+| `ttf_time.py` | Generic day-count helpers (Act/365, Act/360, Act/Act, Bus/252) — *not* the ICE TFO expiry calendar; use `black76_ttf.ttf_expiry_date` for that |
 | `pricing/` | Core model implementations: Black-Scholes, Black-76, Bachelier, binomial tree, Monte Carlo, implied vol solvers |
 | `dashboard/` | React + Vite frontend — interactive pricer, Greeks charts, 3D vol surface |
 
@@ -54,9 +54,21 @@ price = b76_price_ttf(F=35.0, K=35.0, contract="Jun26", r=0.03, sigma=0.50)
 # Greeks
 g = b76_greeks(F=35.0, K=35.0, T=0.25, r=0.03, sigma=0.50, option_type="call")
 print(f"Delta: {g.delta:.2f}  Vega: {g.vega:.2f}  Theta: {g.theta:.4f}/day")
+
+# Load a TTF forward curve from a hand-typed dict and inspect it
+from ttf_market_data import load_ttf_forward_curve
+fc = load_ttf_forward_curve(
+    source="manual",
+    data={"Jun-26": 30.5, "Jul-26": 31.2, "Aug-26": 32.0},
+)
+# Or fc = load_ttf_forward_curve(source="csv", filepath="ttf_forwards.csv")
+# Or fc = load_ttf_forward_curve()  # uses the bundled Jun-26→Dec-27 sample
 ```
 
 Accepted contract formats: `"TTFM26"`, `"Jun26"`, `"Jun2026"`.
+
+See **Manual Forward Curve & Vol Surface** below for the full forward-curve
+loader and the delta-quoted vol-surface helpers.
 
 ## Module Overview
 
@@ -81,22 +93,17 @@ Use **Black-76** for normal market conditions (F > ~5 EUR/MWh). Use **Bachelier*
 ### `ttf_market_data.py` — Market Data
 
 Builds forward curves and vol surfaces from market data, with SABR calibration.
+The class delegates the option-expiry calculation to
+`black76_ttf.ttf_expiry_date` (ICE TFO rule, UK calendar) so dates stay in
+sync with the rest of the project.
 
 ```python
-from ttf_market_data import TTFExpiryCalendar, VolatilitySurface, calibrate_sabr
+from datetime import date
+from ttf_market_data import TTFExpiryCalendar, VolatilitySurfaceBuilder, MarketCalibration
 
-calendar = TTFExpiryCalendar()
-expiry = calendar.options_expiry(2026, 6)   # 2026-05-22
-```
-
-### `ttf_time.py` — Time Utilities
-
-Day-count conventions and business-day helpers for precise T calculations.
-
-```python
-from ttf_time import ttf_time_to_expiry, DayCountConvention
-
-T = ttf_time_to_expiry("TTFM26", convention=DayCountConvention.ACT365)
+calendar = TTFExpiryCalendar(reference_date=date(2026, 4, 20))
+calendar.expiry_date(2026, 6)            # date(2026, 5, 27)  — ICE TFO
+calendar.futures_expiry_date(2026, 6)    # date(2026, 5, 29)  — last UK BD
 ```
 
 ### `pricing/` — Core Models
@@ -279,7 +286,7 @@ Click **Export to Excel** in any tab to download a `.xlsx` file.
 Options_pricing/
 ├── black76_ttf.py        # TTF-specific Black-76 & Bachelier wrapper (main entry point)
 ├── ttf_market_data.py    # Forward curves, vol surfaces, SABR calibration
-├── ttf_time.py           # Day-count conventions, TARGET2 calendar, T calculations
+├── ttf_time.py           # Generic day-count helpers (Act/365, Act/360, Act/Act, Bus/252)
 ├── main.py               # Demo / entry-point script
 ├── pricing/              # Core model library
 │   ├── black76.py        # Black-76 model
