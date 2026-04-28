@@ -1,68 +1,59 @@
-# Repository Inventory — TTF Options
+# Repository Inventory: maziez11-lgtm/Options_pricing
 
-Snapshot of every branch and every tracked file with its last commit date and short SHA. Generated from the remote refs at the time of audit.
+_Generated: 2026-04-28 21:59 UTC_
 
-**Total branches:** 23
+Per-branch listing of every tracked file with the date (UTC) of the last commit that touched it on that branch.
 
 ## Branch summary
 
-| Branch | Latest commit | Date | Subject | Files |
-|---|---|---|---|---|
-| `origin/Dashboard` | `f94c4aa` | 2026-04-20 | Initial commit | 1 |
-| `origin/Data` | `f94c4aa` | 2026-04-20 | Initial commit | 1 |
-| `origin/Docs` | `caa1482` | 2026-04-22 | Merge pull request #7 from maziez11-lgtm/claude/finish-documentatio… | 48 |
-| `origin/Pricing` | `f94c4aa` | 2026-04-20 | Initial commit | 1 |
-| `origin/Spread` | `e41679d` | 2026-04-21 | feat: add b76_price_ttf and bach_price_ttf — price by contract name | 45 |
-| `origin/Structures` | `e41679d` | 2026-04-21 | feat: add b76_price_ttf and bach_price_ttf — price by contract name | 45 |
-| `origin/claude/add-vol-interpolation-cDcgm` | `ab3deb9` | 2026-04-28 | Merge pull request #20 from maziez11-lgtm/claude/add-vol-interpolat… | 58 |
-| `origin/claude/complete-user-manual-NlQeR` | `bdc5ccd` | 2026-04-26 | docs: add Part 6 (financial glossary) to the user manual | 58 |
-| `origin/claude/find-latest-docs-QJ8Oy` | `67a5c0c` | 2026-04-28 | docs(readme): align README with the ICE TFO calendar and the manual… | 58 |
-| `origin/claude/finish-documentation-oN97r` | `a74abfc` | 2026-04-22 | feat: add ICE Endex official TTF options expiry calendar to black76… | 46 |
-| `origin/claude/fix-ttf-expiry-calculation-XeHKp` | `abce643` | 2026-04-27 | fix: use raw calendar days / 365 in ttf_time_to_expiry | 58 |
-| `origin/claude/jupyter-options-pricer-343IL` | `b2dd83c` | 2026-04-24 | test: extend test_suite.py with structures, spread, and edge cases | 56 |
-| `origin/claude/pricing-feature-ea0hD` | `80b336a` | 2026-04-20 | fix(greeks): add missing rho to b76_greeks, add theta+rho to bach_g… | 12 |
-| `origin/claude/rewrite-user-manual-english-on1Bj` | `2a73ea0` | 2026-04-26 | Regenerate user_manual.html and user_manual.pdf in English | 58 |
-| `origin/claude/translate-reports-english-d5Q8p` | `130c6d4` | 2026-04-26 | docs: add Part 6 (financial glossary) to the user manual | 58 |
-| `origin/claude/update-user-manual-pdf-Ae10o` | `a5bf23f` | 2026-04-26 | docs: regenerate user_manual.pdf from current user_manual.md | 58 |
-| `origin/claude/user-manual-html-jGGp1` | `53e1559` | 2026-04-26 | docs: regenerate user_manual.html and .pdf from rewritten markdown | 58 |
-| `origin/dashboard` | `f3d1323` | 2026-04-20 | fix(dashboard): correct Brent cond1 for b<a case, remove unused ki … | 43 |
-| `origin/data` | `5a5776e` | 2026-04-20 | fix(data): 4 bugs + 2 style fixes in ttf_market_data.py | 20 |
-| `origin/docs` | `2a29ed9` | 2026-04-25 | docs: add English sections for ttf_market_data.py and ttf_hh_spread.py | 52 |
-| `origin/main` | `67a5c0c` | 2026-04-28 | docs(readme): align README with the ICE TFO calendar and the manual… | 58 |
-| `origin/spread` | `81a91b1` | 2026-04-21 | feat: add ttf_hh_spread.py — TTF/Henry Hub spread option pricer (Ma… | 47 |
-| `origin/structures` | `c898843` | 2026-04-21 | feat: add structures_ttf.py — 10 multi-leg option structure pricer | 46 |
+| Branch | Tip commit | Tip date | File count |
+|---|---|---|---|
+| `Dashboard` | `f94c4aa` | 2026-04-20 | 1 |
+| `Data` | `f94c4aa` | 2026-04-20 | 1 |
+| `Docs` | `caa1482` | 2026-04-22 | 48 |
+| `Pricing` | `f94c4aa` | 2026-04-20 | 1 |
+| `Spread` | `e41679d` | 2026-04-21 | 45 |
+| `Structures` | `e41679d` | 2026-04-21 | 45 |
+| `claude/add-vol-interpolation-cDcgm` | `ab3deb9` | 2026-04-28 | 58 |
+| `claude/complete-user-manual-NlQeR` | `bdc5ccd` | 2026-04-26 | 58 |
+| `claude/find-latest-docs-QJ8Oy` | `df73cc6` | 2026-04-28 | 59 |
+| `claude/finish-documentation-oN97r` | `a74abfc` | 2026-04-22 | 46 |
+| `claude/fix-ttf-expiry-calculation-XeHKp` | `abce643` | 2026-04-27 | 58 |
+| `claude/jupyter-options-pricer-343IL` | `b2dd83c` | 2026-04-24 | 56 |
+| `claude/pricing-feature-ea0hD` | `80b336a` | 2026-04-20 | 12 |
+| `claude/rewrite-user-manual-english-on1Bj` | `2a73ea0` | 2026-04-26 | 58 |
+| `claude/translate-reports-english-d5Q8p` | `130c6d4` | 2026-04-26 | 58 |
+| `claude/update-user-manual-pdf-Ae10o` | `a5bf23f` | 2026-04-26 | 58 |
+| `claude/user-manual-html-jGGp1` | `53e1559` | 2026-04-26 | 58 |
+| `dashboard` | `f3d1323` | 2026-04-20 | 43 |
+| `data` | `5a5776e` | 2026-04-20 | 20 |
+| `docs` | `2a29ed9` | 2026-04-25 | 52 |
+| `main` | `df73cc6` | 2026-04-28 | 59 |
+| `spread` | `81a91b1` | 2026-04-21 | 47 |
+| `structures` | `c898843` | 2026-04-21 | 46 |
 
----
 
-## Per-branch file inventory
+## Branch: `Dashboard`
 
-### `origin/Dashboard`
+Tip: `f94c4aa` (2026-04-20)
 
-_Head: `f94c4aa` (2026-04-20) — Initial commit_
-
-_1 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `README.md` | 2026-04-20 | `f94c4aa` |
 
-### `origin/Data`
+## Branch: `Data`
 
-_Head: `f94c4aa` (2026-04-20) — Initial commit_
+Tip: `f94c4aa` (2026-04-20)
 
-_1 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `README.md` | 2026-04-20 | `f94c4aa` |
 
-### `origin/Docs`
+## Branch: `Docs`
 
-_Head: `caa1482` (2026-04-22) — Merge pull request #7 from maziez11-lgtm/claude/finish-documentation-oN97r_
+Tip: `caa1482` (2026-04-22)
 
-_48 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -113,23 +104,19 @@ _48 files._
 | `ttf_time.py` | 2026-04-21 | `20cbca6` |
 | `user_manual.md` | 2026-04-21 | `6fa5a97` |
 
-### `origin/Pricing`
+## Branch: `Pricing`
 
-_Head: `f94c4aa` (2026-04-20) — Initial commit_
+Tip: `f94c4aa` (2026-04-20)
 
-_1 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `README.md` | 2026-04-20 | `f94c4aa` |
 
-### `origin/Spread`
+## Branch: `Spread`
 
-_Head: `e41679d` (2026-04-21) — feat: add b76_price_ttf and bach_price_ttf — price by contract name_
+Tip: `e41679d` (2026-04-21)
 
-_45 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-20 | `f94c4aa` |
@@ -177,13 +164,11 @@ _45 files._
 | `ttf_output/ttf_vol_surface_pivot.csv` | 2026-04-20 | `40f4ff5` |
 | `ttf_time.py` | 2026-04-21 | `20cbca6` |
 
-### `origin/Structures`
+## Branch: `Structures`
 
-_Head: `e41679d` (2026-04-21) — feat: add b76_price_ttf and bach_price_ttf — price by contract name_
+Tip: `e41679d` (2026-04-21)
 
-_45 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-20 | `f94c4aa` |
@@ -231,13 +216,11 @@ _45 files._
 | `ttf_output/ttf_vol_surface_pivot.csv` | 2026-04-20 | `40f4ff5` |
 | `ttf_time.py` | 2026-04-21 | `20cbca6` |
 
-### `origin/claude/add-vol-interpolation-cDcgm`
+## Branch: `claude/add-vol-interpolation-cDcgm`
 
-_Head: `ab3deb9` (2026-04-28) — Merge pull request #20 from maziez11-lgtm/claude/add-vol-interpolation-cDcgm_
+Tip: `ab3deb9` (2026-04-28)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-28 | `5015232` |
@@ -298,13 +281,11 @@ _58 files._
 | `user_manual.md` | 2026-04-26 | `130c6d4` |
 | `user_manual.pdf` | 2026-04-26 | `130c6d4` |
 
-### `origin/claude/complete-user-manual-NlQeR`
+## Branch: `claude/complete-user-manual-NlQeR`
 
-_Head: `bdc5ccd` (2026-04-26) — docs: add Part 6 (financial glossary) to the user manual_
+Tip: `bdc5ccd` (2026-04-26)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -365,16 +346,15 @@ _58 files._
 | `user_manual.md` | 2026-04-26 | `bdc5ccd` |
 | `user_manual.pdf` | 2026-04-26 | `bdc5ccd` |
 
-### `origin/claude/find-latest-docs-QJ8Oy`
+## Branch: `claude/find-latest-docs-QJ8Oy`
 
-_Head: `67a5c0c` (2026-04-28) — docs(readme): align README with the ICE TFO calendar and the manual loader_
+Tip: `df73cc6` (2026-04-28)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-28 | `67a5c0c` |
+| `audit_inventory.md` | 2026-04-28 | `df73cc6` |
 | `audit_report.md` | 2026-04-26 | `cb1d798` |
 | `black76_ttf.py` | 2026-04-28 | `a87f8ff` |
 | `consistency_report.md` | 2026-04-26 | `cb1d798` |
@@ -432,13 +412,11 @@ _58 files._
 | `user_manual.md` | 2026-04-28 | `a1c74a1` |
 | `user_manual.pdf` | 2026-04-28 | `67a5c0c` |
 
-### `origin/claude/finish-documentation-oN97r`
+## Branch: `claude/finish-documentation-oN97r`
 
-_Head: `a74abfc` (2026-04-22) — feat: add ICE Endex official TTF options expiry calendar to black76_ttf.py_
+Tip: `a74abfc` (2026-04-22)
 
-_46 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -487,13 +465,11 @@ _46 files._
 | `ttf_time.py` | 2026-04-21 | `20cbca6` |
 | `user_manual.md` | 2026-04-21 | `6fa5a97` |
 
-### `origin/claude/fix-ttf-expiry-calculation-XeHKp`
+## Branch: `claude/fix-ttf-expiry-calculation-XeHKp`
 
-_Head: `abce643` (2026-04-27) — fix: use raw calendar days / 365 in ttf_time_to_expiry_
+Tip: `abce643` (2026-04-27)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -554,13 +530,11 @@ _58 files._
 | `user_manual.md` | 2026-04-26 | `130c6d4` |
 | `user_manual.pdf` | 2026-04-26 | `130c6d4` |
 
-### `origin/claude/jupyter-options-pricer-343IL`
+## Branch: `claude/jupyter-options-pricer-343IL`
 
-_Head: `b2dd83c` (2026-04-24) — test: extend test_suite.py with structures, spread, and edge cases_
+Tip: `b2dd83c` (2026-04-24)
 
-_56 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -619,13 +593,11 @@ _56 files._
 | `ttf_time.py` | 2026-04-21 | `20cbca6` |
 | `user_manual.md` | 2026-04-21 | `6fa5a97` |
 
-### `origin/claude/pricing-feature-ea0hD`
+## Branch: `claude/pricing-feature-ea0hD`
 
-_Head: `80b336a` (2026-04-20) — fix(greeks): add missing rho to b76_greeks, add theta+rho to bach_greeks_
+Tip: `80b336a` (2026-04-20)
 
-_12 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `README.md` | 2026-04-20 | `f94c4aa` |
 | `black76_ttf.py` | 2026-04-20 | `d1dd9dc` |
@@ -640,13 +612,11 @@ _12 files._
 | `pricing/monte_carlo.py` | 2026-04-20 | `d1dd9dc` |
 | `requirements.txt` | 2026-04-20 | `d1dd9dc` |
 
-### `origin/claude/rewrite-user-manual-english-on1Bj`
+## Branch: `claude/rewrite-user-manual-english-on1Bj`
 
-_Head: `2a73ea0` (2026-04-26) — Regenerate user_manual.html and user_manual.pdf in English_
+Tip: `2a73ea0` (2026-04-26)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -707,13 +677,11 @@ _58 files._
 | `user_manual.md` | 2026-04-26 | `786f475` |
 | `user_manual.pdf` | 2026-04-26 | `2a73ea0` |
 
-### `origin/claude/translate-reports-english-d5Q8p`
+## Branch: `claude/translate-reports-english-d5Q8p`
 
-_Head: `130c6d4` (2026-04-26) — docs: add Part 6 (financial glossary) to the user manual_
+Tip: `130c6d4` (2026-04-26)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -774,13 +742,11 @@ _58 files._
 | `user_manual.md` | 2026-04-26 | `130c6d4` |
 | `user_manual.pdf` | 2026-04-26 | `130c6d4` |
 
-### `origin/claude/update-user-manual-pdf-Ae10o`
+## Branch: `claude/update-user-manual-pdf-Ae10o`
 
-_Head: `a5bf23f` (2026-04-26) — docs: regenerate user_manual.pdf from current user_manual.md_
+Tip: `a5bf23f` (2026-04-26)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -841,13 +807,11 @@ _58 files._
 | `user_manual.md` | 2026-04-26 | `130c6d4` |
 | `user_manual.pdf` | 2026-04-26 | `a5bf23f` |
 
-### `origin/claude/user-manual-html-jGGp1`
+## Branch: `claude/user-manual-html-jGGp1`
 
-_Head: `53e1559` (2026-04-26) — docs: regenerate user_manual.html and .pdf from rewritten markdown_
+Tip: `53e1559` (2026-04-26)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -908,13 +872,11 @@ _58 files._
 | `user_manual.md` | 2026-04-25 | `18e5185` |
 | `user_manual.pdf` | 2026-04-26 | `53e1559` |
 
-### `origin/dashboard`
+## Branch: `dashboard`
 
-_Head: `f3d1323` (2026-04-20) — fix(dashboard): correct Brent cond1 for b<a case, remove unused ki variable_
+Tip: `f3d1323` (2026-04-20)
 
-_43 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `README.md` | 2026-04-20 | `f94c4aa` |
 | `black76_ttf.py` | 2026-04-20 | `d1dd9dc` |
@@ -960,13 +922,11 @@ _43 files._
 | `ttf_output/ttf_vol_surface.json` | 2026-04-20 | `40f4ff5` |
 | `ttf_output/ttf_vol_surface_pivot.csv` | 2026-04-20 | `40f4ff5` |
 
-### `origin/data`
+## Branch: `data`
 
-_Head: `5a5776e` (2026-04-20) — fix(data): 4 bugs + 2 style fixes in ttf_market_data.py_
+Tip: `5a5776e` (2026-04-20)
 
-_20 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `README.md` | 2026-04-20 | `f94c4aa` |
 | `black76_ttf.py` | 2026-04-20 | `d1dd9dc` |
@@ -989,13 +949,11 @@ _20 files._
 | `ttf_output/ttf_vol_surface.json` | 2026-04-20 | `40f4ff5` |
 | `ttf_output/ttf_vol_surface_pivot.csv` | 2026-04-20 | `40f4ff5` |
 
-### `origin/docs`
+## Branch: `docs`
 
-_Head: `2a29ed9` (2026-04-25) — docs: add English sections for ttf_market_data.py and ttf_hh_spread.py_
+Tip: `2a29ed9` (2026-04-25)
 
-_52 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-22 | `64784c1` |
@@ -1050,16 +1008,15 @@ _52 files._
 | `user_manual.md` | 2026-04-25 | `2a29ed9` |
 | `user_manual.pdf` | 2026-04-23 | `a06c29e` |
 
-### `origin/main`
+## Branch: `main`
 
-_Head: `67a5c0c` (2026-04-28) — docs(readme): align README with the ICE TFO calendar and the manual loader_
+Tip: `df73cc6` (2026-04-28)
 
-_58 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-28 | `67a5c0c` |
+| `audit_inventory.md` | 2026-04-28 | `df73cc6` |
 | `audit_report.md` | 2026-04-26 | `cb1d798` |
 | `black76_ttf.py` | 2026-04-28 | `a87f8ff` |
 | `consistency_report.md` | 2026-04-26 | `cb1d798` |
@@ -1117,13 +1074,11 @@ _58 files._
 | `user_manual.md` | 2026-04-28 | `a1c74a1` |
 | `user_manual.pdf` | 2026-04-28 | `67a5c0c` |
 
-### `origin/spread`
+## Branch: `spread`
 
-_Head: `81a91b1` (2026-04-21) — feat: add ttf_hh_spread.py — TTF/Henry Hub spread option pricer (Margrabe)_
+Tip: `81a91b1` (2026-04-21)
 
-_47 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-20 | `f94c4aa` |
@@ -1173,13 +1128,11 @@ _47 files._
 | `ttf_output/ttf_vol_surface_pivot.csv` | 2026-04-20 | `40f4ff5` |
 | `ttf_time.py` | 2026-04-21 | `20cbca6` |
 
-### `origin/structures`
+## Branch: `structures`
 
-_Head: `c898843` (2026-04-21) — feat: add structures_ttf.py — 10 multi-leg option structure pricer_
+Tip: `c898843` (2026-04-21)
 
-_46 files._
-
-| File | Last commit | SHA |
+| File | Last commit date | Commit |
 |---|---|---|
 | `.gitignore` | 2026-04-20 | `8dcfaad` |
 | `README.md` | 2026-04-20 | `f94c4aa` |
@@ -1227,4 +1180,3 @@ _46 files._
 | `ttf_output/ttf_vol_surface.json` | 2026-04-20 | `40f4ff5` |
 | `ttf_output/ttf_vol_surface_pivot.csv` | 2026-04-20 | `40f4ff5` |
 | `ttf_time.py` | 2026-04-21 | `20cbca6` |
-
