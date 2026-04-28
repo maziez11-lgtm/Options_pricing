@@ -20,25 +20,86 @@ from scipy.stats import norm
 
 
 # ---------------------------------------------------------------------------
-# ICE TFO (Dutch TTF Natural Gas Options) — Official expiry calendar
+# Expiry calendar (self-contained, no external dependencies)
 # ---------------------------------------------------------------------------
-# ICE product code: TFO
+
+def _is_business_day(d: date) -> bool:
+    return d.weekday() < 5
+
+
+def _prev_business_day(d: date) -> date:
+    while not _is_business_day(d):
+        d -= timedelta(days=1)
+    return d
+
+
+def _subtract_business_days(d: date, n: int) -> date:
+    while n > 0:
+        d -= timedelta(days=1)
+        if _is_business_day(d):
+            n -= 1
+    return d
+
+
+def futures_expiry_from_delivery(delivery_year: int, delivery_month: int) -> date:
+    """Last business day of the month before the delivery month (futures LTD)."""
+    last_of_prev = date(delivery_year, delivery_month, 1) - timedelta(days=1)
+    return _prev_business_day(last_of_prev)
+
+
+def options_expiry_from_delivery(delivery_year: int, delivery_month: int) -> date:
+    """5 business days before the futures LTD (ICE/EEX TTF options convention)."""
+    return _subtract_business_days(
+        futures_expiry_from_delivery(delivery_year, delivery_month), 5
+    )
+
+
+def t_from_delivery(
+    delivery_year: int,
+    delivery_month: int,
+    reference: date | None = None,
+) -> float:
+    """ACT/365 time to TTF options expiry for a given delivery month."""
+    ref = reference or date.today()
+    exp = options_expiry_from_delivery(delivery_year, delivery_month)
+    return max((exp - ref).days + 1, 0) / 365.0
+
+
+def t_futures_from_delivery(
+    delivery_year: int,
+    delivery_month: int,
+    reference: date | None = None,
+) -> float:
+    """ACT/365 time to TTF futures expiry for a given delivery month."""
+    ref = reference or date.today()
+    exp = futures_expiry_from_delivery(delivery_year, delivery_month)
+    return max((exp - ref).days + 1, 0) / 365.0
+
+
+# ---------------------------------------------------------------------------
+# ICE Endex Dutch TTF Natural Gas — Official expiry calendar
+# ---------------------------------------------------------------------------
+# Rules (ICE Endex Dutch TTF Natural Gas Options):
+#   - European-style options settling into ICE Endex TTF futures
+#   - Expiry candidate = 5 calendar days BEFORE the 1st calendar day
+#     of the delivery month
+#   - If the candidate is not a business day, roll back to the previous
+#     business day
+#   - If that rolled-back business day coincides with the last trading
+#     day of the underlying future, roll back one more business day
+#   - Holiday calendar = intersection of NL + UK bank holidays relevant
+#     to ICE Endex (New Year, Good Friday, Easter Monday, Labour Day,
+#     Christmas, Boxing Day)
 #
-# Definition (ICE TFO contract specification, verbatim):
-#
-#   "Trading will cease when the intraday settlement price of the
-#    underlying futures contract is set, five calendar days before
-#    the start of the contract month. If that day is a non-business
-#    day or non-UK business day, expiry will occur on the nearest
-#    prior business day, except where that day is also the expiry
-#    date of the underlying futures contract, in which case expiry
-#    will occur on the preceding business day."
-#
-# Holiday calendar: UK public holidays only (England & Wales).
+# NB: this is INDEPENDENT from `options_expiry_from_delivery` above,
+# which uses a simpler "5 business days before futures LTD" convention.
+# The two functions deliberately coexist: existing pricing code that
+# imports `options_expiry_from_delivery` keeps its behaviour; new code
+# using the ICE Endex rule should call `ttf_expiry_date` instead.
 
 
 def _easter_sunday(year: int) -> date:
-    """Gregorian Easter Sunday (Gauss's algorithm)."""
+    """Gregorian Easter Sunday via Gauss's algorithm."""
     a = year % 19
     b, c = divmod(year, 100)
     d, e = divmod(b, 4)
@@ -52,91 +113,61 @@ def _easter_sunday(year: int) -> date:
     return date(year, month, day + 1)
 
 
-def _shift_off_weekend(d: date) -> date:
-    """UK substitution: weekend holidays roll forward to the next weekday."""
-    if d.weekday() == 5:        # Saturday → Monday
-        return d + timedelta(days=2)
-    if d.weekday() == 6:        # Sunday → Monday
-        return d + timedelta(days=1)
-    return d
+def _ttf_holidays(year: int) -> frozenset[date]:
+    """NL + UK bank holidays observed by ICE Endex for TTF trading.
 
-
-def _first_monday(year: int, month: int) -> date:
-    first = date(year, month, 1)
-    return first + timedelta(days=(0 - first.weekday()) % 7)
-
-
-def _last_monday(year: int, month: int) -> date:
-    nxt = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
-    last = nxt - timedelta(days=1)
-    return last - timedelta(days=last.weekday())
-
-
-def _uk_holidays(year: int) -> frozenset[date]:
-    """UK public holidays (England & Wales).
-
-    Includes:
-      - New Year's Day (1 Jan, weekend → next weekday)
-      - Good Friday and Easter Monday
-      - Early May bank holiday (1st Monday of May)
-      - Spring bank holiday    (last Monday of May)
-      - Summer bank holiday    (last Monday of August)
-      - Christmas Day (25 Dec, weekend → next weekday)
-      - Boxing Day    (26 Dec, weekend → next weekday, distinct from Christmas)
+    Conservative intersection — covers the six fixed closures that both
+    Dutch and UK markets share:
+        Jan 1  New Year's Day
+        GF-2   Good Friday   (Easter Sunday − 2)
+        EM+1   Easter Monday (Easter Sunday + 1)
+        May 1  Labour Day (NL) — also covers early-May UK bank holiday
+        Dec 25 Christmas Day
+        Dec 26 Boxing Day / 2nd Christmas Day
     """
     easter = _easter_sunday(year)
-    christmas = _shift_off_weekend(date(year, 12, 25))
-    boxing = _shift_off_weekend(date(year, 12, 26))
-    if boxing == christmas:
-        boxing = christmas + timedelta(days=1)
     return frozenset([
-        _shift_off_weekend(date(year, 1, 1)),
-        easter - timedelta(days=2),       # Good Friday
-        easter + timedelta(days=1),       # Easter Monday
-        _first_monday(year, 5),           # Early May bank holiday
-        _last_monday(year, 5),            # Spring bank holiday
-        _last_monday(year, 8),            # Summer bank holiday
-        christmas,
-        boxing,
+        date(year, 1, 1),
+        easter - timedelta(days=2),   # Good Friday
+        easter + timedelta(days=1),   # Easter Monday
+        date(year, 5, 1),             # Labour Day (NL)
+        date(year, 12, 25),
+        date(year, 12, 26),
     ])
 
 
 def ttf_is_business_day(d: date) -> bool:
-    """Return True if *d* is a UK business day.
+    """Return True if *d* is a trading day on ICE Endex.
 
-    Excludes weekends and UK public holidays only.
+    A TTF business day is Mon–Fri excluding the NL + UK bank holidays
+    listed in :func:`_ttf_holidays`.
     """
-    if d.weekday() >= 5:
+    if d.weekday() >= 5:     # Saturday=5, Sunday=6
         return False
-    return d not in _uk_holidays(d.year)
+    return d not in _ttf_holidays(d.year)
 
 
-def _prev_uk_bd(d: date) -> date:
-    """Roll *d* back to the nearest prior UK business day (inclusive)."""
+def _ttf_prev_bd(d: date) -> date:
+    """Roll *d* back to the previous ICE Endex business day (inclusive)."""
     while not ttf_is_business_day(d):
         d -= timedelta(days=1)
     return d
 
 
 def _ttf_futures_ltd(contract_year: int, contract_month: int) -> date:
-    """ICE TTF futures last trading day = last UK business day of the month
-    immediately before the contract month."""
+    """ICE Endex TTF futures last trading day.
+
+    = last ICE Endex business day of the month *before* the delivery month.
+    Respects the NL+UK holiday calendar (so e.g. a LTD falling on Good
+    Friday is rolled back).
+    """
     first_of_delivery = date(contract_year, contract_month, 1)
-    return _prev_uk_bd(first_of_delivery - timedelta(days=1))
+    last_of_prev_month = first_of_delivery - timedelta(days=1)
+    return _ttf_prev_bd(last_of_prev_month)
 
 
 def ttf_expiry_date(contract_month: int, contract_year: int) -> date:
-    """ICE TFO option expiry date for the given contract month / year.
-
-    Implements the ICE TFO rule verbatim:
-
-        Trading will cease when the intraday settlement price of the
-        underlying futures contract is set, five calendar days before
-        the start of the contract month. If that day is a non-business
-        day or non-UK business day, expiry will occur on the nearest
-        prior business day, except where that day is also the expiry
-        date of the underlying futures contract, in which case expiry
-        will occur on the preceding business day.
+    """Official ICE Endex Dutch TTF option expiry date.
 
     Parameters
     ----------
@@ -145,16 +176,32 @@ def ttf_expiry_date(contract_month: int, contract_year: int) -> date:
 
     Returns
     -------
-    :class:`datetime.date` — the option last trading day.
+    :class:`datetime.date` — the last trading day of the option.
+
+    Algorithm
+    ---------
+    1. Candidate = 1st of delivery month − 5 calendar days
+    2. If the candidate is not a business day → previous business day
+    3. If that business day equals the futures LTD → step back one more
+       business day
+
+    Examples
+    --------
+    >>> ttf_expiry_date(6, 2026)   # Jun-26
+    datetime.date(2026, 5, 27)
+    >>> ttf_expiry_date(1, 2026)   # Jan-26 — Dec-25 holidays bite
+    datetime.date(2025, 12, 24)
     """
     if not (1 <= contract_month <= 12):
         raise ValueError(f"contract_month must be in 1..12, got {contract_month}")
 
-    candidate = date(contract_year, contract_month, 1) - timedelta(days=5)
-    candidate = _prev_uk_bd(candidate)
+    delivery_first = date(contract_year, contract_month, 1)
+    candidate = delivery_first - timedelta(days=5)
+    candidate = _ttf_prev_bd(candidate)
 
-    if candidate == _ttf_futures_ltd(contract_year, contract_month):
-        candidate = _prev_uk_bd(candidate - timedelta(days=1))
+    futures_ltd = _ttf_futures_ltd(contract_year, contract_month)
+    if candidate == futures_ltd:
+        candidate = _ttf_prev_bd(candidate - timedelta(days=1))
     return candidate
 
 
@@ -163,14 +210,21 @@ def ttf_time_to_expiry(
     contract_year: int,
     reference: date | None = None,
 ) -> float:
-    """Calendar-day time to ICE TFO expiry, divided by 365.
+    """Raw calendar-day time to TTF option expiry, divided by 365.
 
-        t = (expiry_date - today).days / 365
+    t = (expiry_date - today).days / 365
 
-    Calendar days only — no business-day adjustment, no day-count convention.
+    No business-day adjustment, no holiday removal, no day-count convention.
+
+    Parameters
+    ----------
+    contract_month : 1–12 (the delivery month)
+    contract_year  : 4-digit year
+    reference      : valuation date (default: today)
     """
     ref = reference or date.today()
-    return (ttf_expiry_date(contract_month, contract_year) - ref).days / 365
+    exp = ttf_expiry_date(contract_month, contract_year)
+    return (exp - ref).days / 365
 
 
 _MONTH_CODES_ICE = "FGHJKMNQUVXZ"
@@ -180,10 +234,24 @@ def ttf_next_expiries(
     n: int = 6,
     reference: date | None = None,
 ) -> list[tuple[str, date]]:
-    """Return the next *n* upcoming ICE TFO option expiries.
+    """Return the next *n* upcoming ICE Endex TTF option expiries.
 
-    Returns ``(contract_code, expiry_date)`` tuples in ascending order;
-    codes follow ICE convention ``TTF<M><YY>``.
+    Parameters
+    ----------
+    n          : number of consecutive monthly contracts to return
+    reference  : valuation date (default: today)
+
+    Returns
+    -------
+    list of (contract_code, expiry_date) tuples, ordered ascending.
+    Contract codes follow ICE convention: ``TTF<M><YY>``.
+
+    Example
+    -------
+    >>> ttf_next_expiries(3, reference=date(2026, 4, 23))
+    [('TTFK26', date(2026, 4, 24)),
+     ('TTFM26', date(2026, 5, 27)),
+     ('TTFN26', date(2026, 6, 26))]
     """
     if n < 1:
         raise ValueError(f"n must be >= 1, got {n}")
@@ -221,28 +289,28 @@ _ABBR_RE  = re.compile(r"^([A-Za-z]{3})-?(\d{2,4})$")
 
 
 def t_from_contract(contract: str, reference: date | None = None) -> float:
-    """Parse a contract name and return T to ICE TFO expiry (calendar / 365).
+    """Return ACT/365 T (today included) for a TTF contract name.
 
     Accepted formats
     ----------------
-    "TTFH26"   ICE code  (delivery month = March 2026)
-    "Mar26"    3-letter month + 2-digit year
-    "Mar2026"  3-letter month + 4-digit year
+    "TTFH26"   ICE/EEX code  (delivery month = March 2026)
+    "Mar26"    3-letter month abbreviation + 2-digit year
+    "Mar2026"  3-letter month abbreviation + 4-digit year
     """
-    s = contract.strip()
-    m = _ICE_RE.match(s)
+    m = _ICE_RE.match(contract.strip())
     if m:
         month = _MONTH_FROM_CODE[m.group(1).upper()]
         year  = 2000 + int(m.group(2))
-        return ttf_time_to_expiry(month, year, reference)
+        return t_from_delivery(year, month, reference)
 
-    m = _ABBR_RE.match(s)
+    m = _ABBR_RE.match(contract.strip())
     if m:
-        month = _MONTH_FROM_ABBR.get(m.group(1).lower())
+        abbr = m.group(1).lower()
+        yr   = int(m.group(2))
+        year = yr if yr > 100 else 2000 + yr
+        month = _MONTH_FROM_ABBR.get(abbr)
         if month:
-            yr = int(m.group(2))
-            year = yr if yr > 100 else 2000 + yr
-            return ttf_time_to_expiry(month, year, reference)
+            return t_from_delivery(year, month, reference)
 
     raise ValueError(
         f"Cannot parse contract '{contract}'. "
@@ -427,9 +495,9 @@ def b76_theta(
     df = _df(r, T)
     decay = -(F * df * norm.pdf(d1) * sigma) / (2.0 * math.sqrt(T))
     if option_type == "call":
-        rate_term = -r * df * (F * norm.cdf(d1) - K * norm.cdf(d2))
+        rate_term = r * df * (F * norm.cdf(d1) - K * norm.cdf(d2))
     else:
-        rate_term = -r * df * (K * norm.cdf(-d2) - F * norm.cdf(-d1))
+        rate_term = r * df * (K * norm.cdf(-d2) - F * norm.cdf(-d1))
     return (decay + rate_term) / 365.0
 
 
@@ -528,7 +596,7 @@ def bach_theta(
     df = _df(r, T)
     decay = -df * sigma_n * norm.pdf(d) / (2.0 * math.sqrt(T))
     price = bach_price(F, K, T, r, sigma_n, option_type)
-    rate_term = -r * price
+    rate_term = r * price
     return (decay + rate_term) / 365.0
 
 
