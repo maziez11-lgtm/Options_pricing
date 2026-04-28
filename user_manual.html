@@ -10,13 +10,8 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                "Helvetica Neue", Arial, sans-serif;
-  color: #1f2937;
-  background: #ffffff;
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 28px 32px;
-  line-height: 1.55;
-  font-size: 11pt;
+  color: #1f2937; background: #ffffff; max-width: 860px; margin: 0 auto;
+  padding: 28px 32px; line-height: 1.55; font-size: 11pt;
 }
 h1 { color: #0b5394; border-bottom: 3px solid #0b5394; padding-bottom: 6px;
      margin-top: 24px; font-size: 22pt; }
@@ -25,26 +20,18 @@ h2 { color: #0b5394; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px;
 h3 { color: #1e3a8a; margin-top: 20px; font-size: 13pt; }
 h4 { color: #334155; margin-top: 16px; font-size: 11.5pt; }
 p  { margin: 8px 0; text-align: justify; }
-code {
-  font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
-  background: #f1f5f9; color: #be185d; padding: 1px 5px; border-radius: 3px;
-  font-size: 9.5pt;
-}
-pre {
-  background: #0f172a; color: #e2e8f0; padding: 10px 14px; border-radius: 6px;
-  overflow-x: auto; font-size: 9pt; line-height: 1.45;
-  page-break-inside: avoid; white-space: pre-wrap; word-wrap: break-word;
-}
+code { font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
+       background: #f1f5f9; color: #be185d; padding: 1px 5px; border-radius: 3px;
+       font-size: 9.5pt; }
+pre { background: #0f172a; color: #e2e8f0; padding: 10px 14px; border-radius: 6px;
+      overflow-x: auto; font-size: 9pt; line-height: 1.45;
+      page-break-inside: avoid; white-space: pre-wrap; word-wrap: break-word; }
 pre code { background: transparent; color: inherit; padding: 0; font-size: inherit; }
-blockquote {
-  border-left: 4px solid #0ea5e9; background: #e0f2fe;
-  margin: 12px 0; padding: 8px 14px; color: #0c4a6e; font-style: italic;
-  border-radius: 0 4px 4px 0;
-}
-table {
-  border-collapse: collapse; width: 100%; margin: 12px 0;
-  font-size: 10pt; page-break-inside: avoid;
-}
+blockquote { border-left: 4px solid #0ea5e9; background: #e0f2fe;
+             margin: 12px 0; padding: 8px 14px; color: #0c4a6e; font-style: italic;
+             border-radius: 0 4px 4px 0; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0;
+        font-size: 10pt; page-break-inside: avoid; }
 th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; vertical-align: top; }
 th { background: #e0e7ff; color: #1e3a8a; font-weight: 600; }
 tr:nth-child(even) td { background: #f8fafc; }
@@ -591,13 +578,20 @@ gracefully falls back to a synthetic curve when the public quote feed is
 unreachable.</p>
 <p>What is covered:</p>
 <ul>
-<li>TTF expiry calendar (ICE/EEX conventions)</li>
+<li>TTF expiry calendar (ICE TFO official rule, UK business-day calendar)</li>
 <li>Forward curve fetching (Yahoo Finance via <code>requests</code>) with synthetic fallback</li>
+<li><strong>Manual / CSV forward-curve loader</strong> (§ 3.10) with a bundled Jun-26 → Dec-27
+  sample</li>
 <li>Volatility surface construction (strikes × maturities, parametric smile)</li>
+<li><strong>Delta-quoted vol-surface utilities</strong> (§ 3.10): <code>update_vol_surface</code>,
+  <code>display_vol_surface</code>, plus a TTF-style downside-skew sample</li>
 <li>SABR market calibration (Hagan et al. 2002)</li>
 <li>CSV / JSON export for downstream pricing modules</li>
 </ul>
 <blockquote>
+<p>The new manual helpers in § 3.10 import <code>ttf_expiry_date</code> and
+<code>ttf_time_to_expiry</code> directly from <code>black76_ttf</code> so all dates and
+time-to-expiry values stay aligned with the official ICE TFO rule.</p>
 <p><strong>External dependencies</strong> : <code>numpy</code>, <code>pandas</code>, <code>scipy</code>, <code>requests</code>.
 Make sure <code>requirements.txt</code> lists <code>pandas&gt;=2.0</code> and <code>requests&gt;=2.31</code>
 in addition to <code>numpy</code> and <code>scipy</code>.</p>
@@ -930,6 +924,228 @@ print(surface.vol(K=32.0, T=0.25))   # interpolated lognormal vol
 # 4. SABR calibration (per tenor)
 calib = MarketCalibration(surface).calibrate_all()
 print(calib.to_dataframe())
+</code></pre>
+<h3 id="310-manual-csv-forward-curve-and-vol-surface-helpers">3.10 Manual / CSV forward curve and vol-surface helpers</h3>
+<p>A small set of helpers for analytics notebooks that prefer hand-typed or
+CSV market data rather than a live feed. They all anchor on the official
+<strong>ICE TFO</strong> expiry calendar — <code>ttf_expiry_date</code> and <code>ttf_time_to_expiry</code>
+are imported from <code>black76_ttf</code> and never recomputed locally.</p>
+<h4 id="load_ttf_forward_curvesourcemanual-datanone-filepathnone-referencenone-pddataframe"><code>load_ttf_forward_curve(source='manual', data=None, filepath=None, reference=None) -&gt; pd.DataFrame</code></h4>
+<p>Two input modes:</p>
+<table>
+<thead>
+<tr>
+<th><code>source</code></th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'manual'</code></td>
+<td>Uses the <code>data</code> dict <code>{delivery_month: forward_price}</code>. If <code>data</code> is <code>None</code>, falls back to the bundled <code>SAMPLE_TTF_FORWARD_CURVE</code>.</td>
+</tr>
+<tr>
+<td><code>'csv'</code></td>
+<td>Reads <code>filepath</code> (columns <code>delivery_month</code>, <code>forward_price</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>Output DataFrame columns:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>delivery_month</code></td>
+<td>input label, e.g. <code>"Jun-26"</code></td>
+</tr>
+<tr>
+<td><code>expiry_date</code></td>
+<td><code>ttf_expiry_date(month, year)</code></td>
+</tr>
+<tr>
+<td><code>time_to_expiry</code></td>
+<td><code>ttf_time_to_expiry(month, year, reference)</code></td>
+</tr>
+<tr>
+<td><code>forward_price</code></td>
+<td>input price (EUR/MWh)</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">from datetime import date
+from ttf_market_data import load_ttf_forward_curve
+
+# 1. Manual — pass a {delivery_month: forward_price} dict
+fc = load_ttf_forward_curve(
+    source=&quot;manual&quot;,
+    data={&quot;Jun-26&quot;: 30.5, &quot;Jul-26&quot;: 31.2, &quot;Aug-26&quot;: 32.0},
+    reference=date(2026, 4, 23),
+)
+
+# 2. CSV — file with columns (delivery_month, forward_price)
+fc = load_ttf_forward_curve(source=&quot;csv&quot;, filepath=&quot;ttf_forwards.csv&quot;)
+
+# 3. No arguments → bundled sample (Jun-26 → Dec-27, 19 contracts)
+fc = load_ttf_forward_curve(reference=date(2026, 4, 23))
+</code></pre>
+<h4 id="sample_ttf_forward_curve"><code>SAMPLE_TTF_FORWARD_CURVE</code></h4>
+<p>Bundled 19-contract sample, EUR/MWh, with a realistic seasonal shape
+(winter peaks ≈ 35, summer troughs ≈ 28-29). Useful for demos and tests:</p>
+<table>
+<thead>
+<tr>
+<th>Contract</th>
+<th>F (EUR/MWh)</th>
+<th>Contract</th>
+<th>F (EUR/MWh)</th>
+<th>Contract</th>
+<th>F (EUR/MWh)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jun-26</td>
+<td>28.50</td>
+<td>Jan-27</td>
+<td>35.00</td>
+<td>Aug-27</td>
+<td>30.50</td>
+</tr>
+<tr>
+<td>Jul-26</td>
+<td>29.00</td>
+<td>Feb-27</td>
+<td>34.20</td>
+<td>Sep-27</td>
+<td>31.80</td>
+</tr>
+<tr>
+<td>Aug-26</td>
+<td>30.20</td>
+<td>Mar-27</td>
+<td>32.50</td>
+<td>Oct-27</td>
+<td>33.50</td>
+</tr>
+<tr>
+<td>Sep-26</td>
+<td>31.50</td>
+<td>Apr-27</td>
+<td>30.80</td>
+<td>Nov-27</td>
+<td>34.50</td>
+</tr>
+<tr>
+<td>Oct-26</td>
+<td>33.20</td>
+<td>May-27</td>
+<td>29.50</td>
+<td>Dec-27</td>
+<td>35.00</td>
+</tr>
+<tr>
+<td>Nov-26</td>
+<td>34.50</td>
+<td>Jun-27</td>
+<td>29.00</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Dec-26</td>
+<td>35.20</td>
+<td>Jul-27</td>
+<td>29.50</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="update_vol_surfaceforward_curve-vol_surface-pddataframe"><code>update_vol_surface(forward_curve, vol_surface) -&gt; pd.DataFrame</code></h4>
+<p>Joins a delta-quoted vol surface with the forward curve. The input
+<code>vol_surface</code> is a nested dict
+<code>{delivery_month: {call_delta_pillar: vol}}</code> — the same shape as
+<code>SAMPLE_VOL_SURFACE</code> below.</p>
+<p>For each <code>(delivery_month, delta_pillar, vol)</code> triple:</p>
+<ul>
+<li>
+<p><strong>Strike</strong> — at the ATM pillar (<code>Δ = 0.50</code>) the delta-neutral rule:</p>
+<p>K_atm = F · exp(−σ² T / 2)</p>
+</li>
+</ul>
+<p>At any other pillar, the Black-76 inversion of the call delta:</p>
+<pre><code>  K = F · exp(0.5 σ² T − Φ⁻¹(δ) · σ √T)
+</code></pre>
+<ul>
+<li><strong>Delta</strong> — re-computed under Black-76 forward delta <code>N(d₁)</code> at that
+  <code>(K, σ)</code> so each row is internally consistent. Note that at the ATM-DN
+  strike the realised model delta is <code>N(σ √T)</code>, which drifts above 0.50
+  for longer maturities — this is expected.</li>
+<li><strong>Moneyness</strong> — <code>K / F</code>.</li>
+</ul>
+<p>Output columns:</p>
+<pre><code>delivery_month, expiry_date, time_to_expiry, forward_price,
+strike, implied_vol, delta, moneyness
+</code></pre>
+<p>(plus a <code>delta_pillar</code> column carrying the input pillar so that
+<code>display_vol_surface</code> can pivot the smile axis cleanly).</p>
+<pre><code class="language-python">from ttf_market_data import update_vol_surface, SAMPLE_VOL_SURFACE
+vs = update_vol_surface(fc, SAMPLE_VOL_SURFACE)
+print(vs.head(7).to_string(index=False))
+</code></pre>
+<h4 id="sample_vol_surface"><code>SAMPLE_VOL_SURFACE</code></h4>
+<p>A TTF-style downside-skew surface aligned 1-for-1 with
+<code>SAMPLE_TTF_FORWARD_CURVE</code>:</p>
+<ul>
+<li>ATM ≈ <strong>50%</strong> at the front month → ≈ <strong>37%</strong> around 1.5 years</li>
+<li>10-Δ-call to 90-Δ-call wing spread of about <strong>14 vol points</strong>
+  (puts richer than calls — the standard TTF / energy skew)</li>
+<li>Five pillars per smile: <code>Δ ∈ {0.10, 0.25, 0.50, 0.75, 0.90}</code></li>
+</ul>
+<h4 id="display_vol_surfacevol_surface_df-pddataframe"><code>display_vol_surface(vol_surface_df) -&gt; pd.DataFrame</code></h4>
+<p>Pretty-prints the surface as a <code>maturity × call-delta-pillar</code> grid:</p>
+<ul>
+<li>Rows ordered by ascending <code>time_to_expiry</code></li>
+<li>Columns labelled <code>Δ=0.10 … Δ=0.90</code>, with the ATM column suffixed
+  <code>(ATM)</code> so it stands out at a glance</li>
+<li>Vols formatted as percentages with one decimal place</li>
+<li>The function prints the grid to <code>stdout</code> and returns the formatted
+  pivot DataFrame for further export</li>
+</ul>
+<pre><code class="language-python">from ttf_market_data import display_vol_surface
+display_vol_surface(vs)
+</code></pre>
+<pre><code class="language-text">TTF vol surface — rows: maturity, cols: call-delta pillar
+ATM column is the delta-neutral strike (K = F·exp(−σ²T/2))
+
+          Δ=0.10  Δ=0.25 Δ=0.50 (ATM)  Δ=0.75  Δ=0.90
+Delivery
+Jun-26     43.0%   47.0%        50.0%   53.0%   57.0%
+Jul-26     42.0%   46.0%        49.0%   52.0%   56.0%
+Aug-26     41.0%   45.0%        48.0%   51.0%   55.0%
+…
+Nov-27     31.0%   35.0%        38.0%   41.0%   45.0%
+Dec-27     30.0%   34.0%        37.0%   40.0%   44.0%
+</code></pre>
+<h4 id="end-to-end-manual-example">End-to-end manual example</h4>
+<pre><code class="language-python">from datetime import date
+from ttf_market_data import (
+    load_ttf_forward_curve,
+    update_vol_surface,
+    display_vol_surface,
+    SAMPLE_VOL_SURFACE,
+)
+
+ref = date(2026, 4, 23)
+
+fc = load_ttf_forward_curve(reference=ref)        # bundled sample
+vs = update_vol_surface(fc, SAMPLE_VOL_SURFACE)
+display_vol_surface(vs)
 </code></pre>
 <hr>
 <h2 id="4-ttf_hh_spreadpy">4. <code>ttf_hh_spread.py</code></h2>

@@ -504,11 +504,19 @@ unreachable.
 
 What is covered:
 
-- TTF expiry calendar (ICE/EEX conventions)
+- TTF expiry calendar (ICE TFO official rule, UK business-day calendar)
 - Forward curve fetching (Yahoo Finance via `requests`) with synthetic fallback
+- **Manual / CSV forward-curve loader** (§ 3.10) with a bundled Jun-26 → Dec-27
+  sample
 - Volatility surface construction (strikes × maturities, parametric smile)
+- **Delta-quoted vol-surface utilities** (§ 3.10): `update_vol_surface`,
+  `display_vol_surface`, plus a TTF-style downside-skew sample
 - SABR market calibration (Hagan et al. 2002)
 - CSV / JSON export for downstream pricing modules
+
+> The new manual helpers in § 3.10 import `ttf_expiry_date` and
+> `ttf_time_to_expiry` directly from `black76_ttf` so all dates and
+> time-to-expiry values stay aligned with the official ICE TFO rule.
 
 > **External dependencies** : `numpy`, `pandas`, `scipy`, `requests`.
 > Make sure `requirements.txt` lists `pandas>=2.0` and `requests>=2.31`
@@ -837,6 +845,161 @@ print(surface.vol(K=32.0, T=0.25))   # interpolated lognormal vol
 # 4. SABR calibration (per tenor)
 calib = MarketCalibration(surface).calibrate_all()
 print(calib.to_dataframe())
+```
+
+### 3.10 Manual / CSV forward curve and vol-surface helpers
+
+A small set of helpers for analytics notebooks that prefer hand-typed or
+CSV market data rather than a live feed. They all anchor on the official
+**ICE TFO** expiry calendar — `ttf_expiry_date` and `ttf_time_to_expiry`
+are imported from `black76_ttf` and never recomputed locally.
+
+#### `load_ttf_forward_curve(source='manual', data=None, filepath=None, reference=None) -> pd.DataFrame`
+
+Two input modes:
+
+| `source` | What it does |
+|---|---|
+| `'manual'` | Uses the `data` dict `{delivery_month: forward_price}`. If `data` is `None`, falls back to the bundled `SAMPLE_TTF_FORWARD_CURVE`. |
+| `'csv'`    | Reads `filepath` (columns `delivery_month`, `forward_price`). |
+
+Output DataFrame columns:
+
+| Column | Source |
+|---|---|
+| `delivery_month` | input label, e.g. `"Jun-26"` |
+| `expiry_date`    | `ttf_expiry_date(month, year)` |
+| `time_to_expiry` | `ttf_time_to_expiry(month, year, reference)` |
+| `forward_price`  | input price (EUR/MWh) |
+
+```python
+from datetime import date
+from ttf_market_data import load_ttf_forward_curve
+
+# 1. Manual — pass a {delivery_month: forward_price} dict
+fc = load_ttf_forward_curve(
+    source="manual",
+    data={"Jun-26": 30.5, "Jul-26": 31.2, "Aug-26": 32.0},
+    reference=date(2026, 4, 23),
+)
+
+# 2. CSV — file with columns (delivery_month, forward_price)
+fc = load_ttf_forward_curve(source="csv", filepath="ttf_forwards.csv")
+
+# 3. No arguments → bundled sample (Jun-26 → Dec-27, 19 contracts)
+fc = load_ttf_forward_curve(reference=date(2026, 4, 23))
+```
+
+#### `SAMPLE_TTF_FORWARD_CURVE`
+
+Bundled 19-contract sample, EUR/MWh, with a realistic seasonal shape
+(winter peaks ≈ 35, summer troughs ≈ 28-29). Useful for demos and tests:
+
+| Contract | F (EUR/MWh) | Contract | F (EUR/MWh) | Contract | F (EUR/MWh) |
+|---|---|---|---|---|---|
+| Jun-26 | 28.50 | Jan-27 | 35.00 | Aug-27 | 30.50 |
+| Jul-26 | 29.00 | Feb-27 | 34.20 | Sep-27 | 31.80 |
+| Aug-26 | 30.20 | Mar-27 | 32.50 | Oct-27 | 33.50 |
+| Sep-26 | 31.50 | Apr-27 | 30.80 | Nov-27 | 34.50 |
+| Oct-26 | 33.20 | May-27 | 29.50 | Dec-27 | 35.00 |
+| Nov-26 | 34.50 | Jun-27 | 29.00 | | |
+| Dec-26 | 35.20 | Jul-27 | 29.50 | | |
+
+#### `update_vol_surface(forward_curve, vol_surface) -> pd.DataFrame`
+
+Joins a delta-quoted vol surface with the forward curve. The input
+`vol_surface` is a nested dict
+`{delivery_month: {call_delta_pillar: vol}}` — the same shape as
+`SAMPLE_VOL_SURFACE` below.
+
+For each `(delivery_month, delta_pillar, vol)` triple:
+
+- **Strike** — at the ATM pillar (`Δ = 0.50`) the delta-neutral rule:
+
+      K_atm = F · exp(−σ² T / 2)
+
+  At any other pillar, the Black-76 inversion of the call delta:
+
+      K = F · exp(0.5 σ² T − Φ⁻¹(δ) · σ √T)
+
+- **Delta** — re-computed under Black-76 forward delta `N(d₁)` at that
+  `(K, σ)` so each row is internally consistent. Note that at the ATM-DN
+  strike the realised model delta is `N(σ √T)`, which drifts above 0.50
+  for longer maturities — this is expected.
+- **Moneyness** — `K / F`.
+
+Output columns:
+
+```
+delivery_month, expiry_date, time_to_expiry, forward_price,
+strike, implied_vol, delta, moneyness
+```
+
+(plus a `delta_pillar` column carrying the input pillar so that
+`display_vol_surface` can pivot the smile axis cleanly).
+
+```python
+from ttf_market_data import update_vol_surface, SAMPLE_VOL_SURFACE
+vs = update_vol_surface(fc, SAMPLE_VOL_SURFACE)
+print(vs.head(7).to_string(index=False))
+```
+
+#### `SAMPLE_VOL_SURFACE`
+
+A TTF-style downside-skew surface aligned 1-for-1 with
+`SAMPLE_TTF_FORWARD_CURVE`:
+
+- ATM ≈ **50%** at the front month → ≈ **37%** around 1.5 years
+- 10-Δ-call to 90-Δ-call wing spread of about **14 vol points**
+  (puts richer than calls — the standard TTF / energy skew)
+- Five pillars per smile: `Δ ∈ {0.10, 0.25, 0.50, 0.75, 0.90}`
+
+#### `display_vol_surface(vol_surface_df) -> pd.DataFrame`
+
+Pretty-prints the surface as a `maturity × call-delta-pillar` grid:
+
+- Rows ordered by ascending `time_to_expiry`
+- Columns labelled `Δ=0.10 … Δ=0.90`, with the ATM column suffixed
+  `(ATM)` so it stands out at a glance
+- Vols formatted as percentages with one decimal place
+- The function prints the grid to `stdout` and returns the formatted
+  pivot DataFrame for further export
+
+```python
+from ttf_market_data import display_vol_surface
+display_vol_surface(vs)
+```
+
+```text
+TTF vol surface — rows: maturity, cols: call-delta pillar
+ATM column is the delta-neutral strike (K = F·exp(−σ²T/2))
+
+          Δ=0.10  Δ=0.25 Δ=0.50 (ATM)  Δ=0.75  Δ=0.90
+Delivery
+Jun-26     43.0%   47.0%        50.0%   53.0%   57.0%
+Jul-26     42.0%   46.0%        49.0%   52.0%   56.0%
+Aug-26     41.0%   45.0%        48.0%   51.0%   55.0%
+…
+Nov-27     31.0%   35.0%        38.0%   41.0%   45.0%
+Dec-27     30.0%   34.0%        37.0%   40.0%   44.0%
+```
+
+#### End-to-end manual example
+
+```python
+from datetime import date
+from ttf_market_data import (
+    load_ttf_forward_curve,
+    update_vol_surface,
+    display_vol_surface,
+    SAMPLE_VOL_SURFACE,
+)
+
+ref = date(2026, 4, 23)
+
+fc = load_ttf_forward_curve(reference=ref)        # bundled sample
+vs = update_vol_surface(fc, SAMPLE_VOL_SURFACE)
+display_vol_surface(vs)
 ```
 
 ---
