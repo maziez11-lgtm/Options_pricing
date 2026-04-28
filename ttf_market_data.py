@@ -38,7 +38,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from black76_ttf import ttf_expiry_date, ttf_time_to_expiry  # noqa: E402
+from black76_ttf import (  # noqa: E402
+    ttf_expiry_date,
+    ttf_time_to_expiry,
+    ttf_is_business_day,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,68 +76,44 @@ _STANDARD_TENORS = [1 / 12, 2 / 12, 3 / 12, 6 / 12, 9 / 12, 1.0, 2.0]
 class TTFContract:
     delivery_month: int
     delivery_year: int
-    expiry_date: date         # options expiry (5 bd before futures expiry)
-    futures_expiry_date: date # futures last trading day
+    expiry_date: date         # ICE TFO option expiry
+    futures_expiry_date: date # underlying TTF futures last trading day
     contract_code: str
-    T: float                  # time to options expiry in years (Act/365)
+    T: float                  # calendar days to option expiry / 365
 
 
 class TTFExpiryCalendar:
-    """TTF option and futures expiry dates following ICE/EEX conventions.
+    """TTF option and futures expiry dates following the official ICE TFO rule.
 
-    Futures expiry : last business day of the month preceding delivery.
-    Options expiry : 5 business days before the futures expiry.
+    Options expiry follows the ICE TFO contract specification (product code
+    TFO), implemented in :func:`black76_ttf.ttf_expiry_date`.  Source:
+    https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin
+
+    Futures last trading day = last UK business day of the month immediately
+    before the contract month.
     """
 
     def __init__(self, reference_date: Optional[date] = None) -> None:
         self.reference_date = reference_date or date.today()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
-    # Internal business-day helpers (self-contained, no external deps)
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _is_bd(d: date) -> bool:
-        return d.weekday() < 5
-
-    @staticmethod
-    def _prev_bd(d: date) -> date:
-        while d.weekday() >= 5:
-            d -= timedelta(days=1)
-        return d
-
-    @staticmethod
-    def _subtract_bd(d: date, n: int) -> date:
-        while n > 0:
-            d -= timedelta(days=1)
-            if d.weekday() < 5:
-                n -= 1
-        return d
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def futures_expiry_date(self, delivery_year: int, delivery_month: int) -> date:
-        """TTF futures last trading day: last business day of month before delivery."""
-        last_of_prev = date(delivery_year, delivery_month, 1) - timedelta(days=1)
-        return self._prev_bd(last_of_prev)
+        """TTF futures last trading day (last UK business day of the prior month)."""
+        d = date(delivery_year, delivery_month, 1) - timedelta(days=1)
+        while not ttf_is_business_day(d):
+            d -= timedelta(days=1)
+        return d
 
     def expiry_date(self, delivery_year: int, delivery_month: int) -> date:
-        """TTF options expiry: 5 business days before the futures expiry."""
-        return self._subtract_bd(self.futures_expiry_date(delivery_year, delivery_month), 5)
+        """ICE TFO option expiry — delegates to ``ttf_expiry_date``."""
+        return ttf_expiry_date(delivery_month, delivery_year)
 
     def contract_code(self, delivery_year: int, delivery_month: int) -> str:
         """Return ICE-style code, e.g. 'TTFH26' for March 2026."""
         return f"TTF{_MONTH_CODES[delivery_month]}{str(delivery_year)[-2:]}"
 
     def time_to_expiry(self, expiry: date) -> float:
-        """Act/365 Fixed from reference_date to expiry (today included)."""
-        return max((expiry - self.reference_date).days + 1, 0) / 365.0
+        """Calendar days from ``reference_date`` to ``expiry``, divided by 365."""
+        return max((expiry - self.reference_date).days, 0) / 365.0
 
     def active_contracts(self, n: int = 12) -> list[TTFContract]:
         """Return the next *n* monthly TTF contracts."""

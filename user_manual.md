@@ -36,7 +36,8 @@ exercise price (`strike`, in EUR/MWh) on a given expiration date.
 - **Quote**: EUR/MWh (1 MWh = 3.4121 MMBtu).
 - **Day-count**: calendar days / 365 for the time `T` to expiry.
 - **Calendar**: official **ICE TFO** (TTF Options) rule, ICE product code
-  **TFO**:
+  **TFO**
+  ([source](https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin)):
 
   > *Trading will cease when the intraday settlement price of the underlying
   > futures contract is set, five calendar days before the start of the
@@ -105,7 +106,10 @@ A single module, with no external dependency beyond `scipy.stats.norm` and
 
 ### 2.1 ICE TFO expiry calendar
 
-ICE product code: **TFO**. The official rule is:
+ICE product code: **TFO**. Source:
+<https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin>.
+
+The official rule is:
 
 > *Trading will cease when the intraday settlement price of the underlying
 > futures contract is set, five calendar days before the start of the
@@ -530,14 +534,27 @@ A single monthly contract description.
 |---|---|---|
 | `delivery_month` | `int` | 1–12 |
 | `delivery_year` | `int` | e.g. `2026` |
-| `expiry_date` | `date` | Options expiry (5 BD before futures LTD) |
-| `futures_expiry_date` | `date` | Futures last trading day |
+| `expiry_date` | `date` | ICE TFO option expiry |
+| `futures_expiry_date` | `date` | Underlying TTF futures last trading day |
 | `contract_code` | `str` | ICE-style code, e.g. `"TTFH26"` |
-| `T` | `float` | Time to options expiry in years (ACT/365, today included) |
+| `T` | `float` | Calendar days to option expiry / 365 |
 
 ### 3.2 `TTFExpiryCalendar`
 
-Manages the ICE/EEX TTF calendar starting from an arbitrary reference date.
+Convenience class wrapping the official **ICE TFO** rule (product code
+**TFO**) so it can be used with a fixed reference date. All expiry dates
+delegate to `ttf_expiry_date` from `black76_ttf`, so the calendar always
+matches the spec:
+
+> *Trading will cease when the intraday settlement price of the underlying
+> futures contract is set, five calendar days before the start of the
+> contract month. If that day is a non-business day or non-UK business
+> day, expiry will occur on the nearest prior business day, except where
+> that day is also the expiry date of the underlying futures contract, in
+> which case expiry will occur on the preceding business day.*
+
+Source: <https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin>.
+The holiday calendar is **UK public holidays** (England & Wales) only.
 
 ```python
 from datetime import date
@@ -548,7 +565,7 @@ cal = TTFExpiryCalendar(reference_date=date(2026, 4, 20))
 
 #### `futures_expiry_date(delivery_year, delivery_month) -> date`
 
-Last business day of the month preceding delivery.
+Last UK business day of the month immediately before the contract month.
 
 ```python
 cal.futures_expiry_date(2026, 6)   # TTFM26
@@ -557,11 +574,12 @@ cal.futures_expiry_date(2026, 6)   # TTFM26
 
 #### `expiry_date(delivery_year, delivery_month) -> date`
 
-Options expiry: 5 business days before the futures LTD.
+ICE TFO option expiry. Delegates directly to
+`black76_ttf.ttf_expiry_date(delivery_month, delivery_year)`.
 
 ```python
 cal.expiry_date(2026, 6)
-# -> date(2026, 5, 22)
+# -> date(2026, 5, 27)             (Wed)
 ```
 
 #### `contract_code(delivery_year, delivery_month) -> str`
@@ -576,12 +594,12 @@ cal.contract_code(2027, 12)        # -> "TTFZ27"
 
 #### `time_to_expiry(expiry) -> float`
 
-Time `T` in years (ACT/365, reference date included). Returns `0` if the expiry
-is already in the past.
+Time `T` = `(expiry − reference).days / 365` (calendar days only). Returns
+`0` if the expiry is already in the past.
 
 ```python
-cal.time_to_expiry(date(2026, 5, 22))
-# -> 0.0904   (33 days / 365)
+cal.time_to_expiry(date(2026, 5, 27))
+# -> 0.1014   (37 days / 365)
 ```
 
 #### `active_contracts(n=12) -> list[TTFContract]`
@@ -593,9 +611,9 @@ expiry has already passed relative to the reference date.
 contracts = cal.active_contracts(n=3)
 for c in contracts:
     print(c.contract_code, c.expiry_date, round(c.T, 4))
-# TTFK26  2026-04-24  0.0137
-# TTFM26  2026-05-22  0.0904
-# TTFN26  2026-06-23  0.1781
+# TTFK26  2026-04-24  0.0110
+# TTFM26  2026-05-27  0.0932
+# TTFN26  2026-06-26  0.1753
 ```
 
 #### `expiry_for_tenor(tenor_years) -> date`

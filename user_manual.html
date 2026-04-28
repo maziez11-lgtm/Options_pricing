@@ -1,37 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
+<html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TTF Options &mdash; User Manual</title>
 <style>
 @page { size: A4; margin: 18mm 15mm; }
 * { box-sizing: border-box; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-               "Helvetica Neue", Arial, sans-serif;
-  color: #1f2937; background: #ffffff; max-width: 860px; margin: 0 auto;
-  padding: 28px 32px; line-height: 1.55; font-size: 11pt;
-}
-h1 { color: #0b5394; border-bottom: 3px solid #0b5394; padding-bottom: 6px;
-     margin-top: 24px; font-size: 22pt; }
-h2 { color: #0b5394; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px;
-     margin-top: 28px; font-size: 16pt; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+       color: #1f2937; background: #ffffff; max-width: 860px; margin: 0 auto;
+       padding: 28px 32px; line-height: 1.55; font-size: 11pt; }
+h1 { color: #0b5394; border-bottom: 3px solid #0b5394; padding-bottom: 6px; margin-top: 24px; font-size: 22pt; }
+h2 { color: #0b5394; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 28px; font-size: 16pt; }
 h3 { color: #1e3a8a; margin-top: 20px; font-size: 13pt; }
 h4 { color: #334155; margin-top: 16px; font-size: 11.5pt; }
 p  { margin: 8px 0; text-align: justify; }
 code { font-family: "SF Mono", Menlo, Consolas, "Courier New", monospace;
-       background: #f1f5f9; color: #be185d; padding: 1px 5px; border-radius: 3px;
-       font-size: 9.5pt; }
+       background: #f1f5f9; color: #be185d; padding: 1px 5px; border-radius: 3px; font-size: 9.5pt; }
 pre { background: #0f172a; color: #e2e8f0; padding: 10px 14px; border-radius: 6px;
       overflow-x: auto; font-size: 9pt; line-height: 1.45;
       page-break-inside: avoid; white-space: pre-wrap; word-wrap: break-word; }
 pre code { background: transparent; color: inherit; padding: 0; font-size: inherit; }
-blockquote { border-left: 4px solid #0ea5e9; background: #e0f2fe;
-             margin: 12px 0; padding: 8px 14px; color: #0c4a6e; font-style: italic;
-             border-radius: 0 4px 4px 0; }
-table { border-collapse: collapse; width: 100%; margin: 12px 0;
-        font-size: 10pt; page-break-inside: avoid; }
+blockquote { border-left: 4px solid #0ea5e9; background: #e0f2fe; margin: 12px 0;
+             padding: 8px 14px; color: #0c4a6e; font-style: italic; border-radius: 0 4px 4px 0; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 10pt; page-break-inside: avoid; }
 th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; vertical-align: top; }
 th { background: #e0e7ff; color: #1e3a8a; font-weight: 600; }
 tr:nth-child(even) td { background: #f8fafc; }
@@ -39,10 +29,7 @@ ul, ol { margin: 6px 0 10px 22px; }
 li { margin: 3px 0; }
 hr { border: 0; border-top: 2px dashed #cbd5e1; margin: 24px 0; }
 a  { color: #0b5394; text-decoration: none; }
-</style>
-</head>
-<body>
-<h1 id="ttf-natural-gas-options-user-manual">TTF Natural Gas Options — User Manual</h1>
+</style></head><body><h1 id="ttf-natural-gas-options-user-manual">TTF Natural Gas Options — User Manual</h1>
 <p>This manual covers:</p>
 <ul>
 <li><strong>Part 1.</strong> <a href="#1-introduction">Introduction</a> — TTF options, Black-76 vs Bachelier, Greeks</li>
@@ -76,7 +63,8 @@ exercise price (<code>strike</code>, in EUR/MWh) on a given expiration date.</p>
 <li><strong>Quote</strong>: EUR/MWh (1 MWh = 3.4121 MMBtu).</li>
 <li><strong>Day-count</strong>: calendar days / 365 for the time <code>T</code> to expiry.</li>
 <li><strong>Calendar</strong>: official <strong>ICE TFO</strong> (TTF Options) rule, ICE product code
-  <strong>TFO</strong>:</li>
+  <strong>TFO</strong>
+  (<a href="https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin">source</a>):</li>
 </ul>
 <blockquote>
 <p><em>Trading will cease when the intraday settlement price of the underlying
@@ -208,7 +196,9 @@ under-balanced gas), switch to Bachelier. Otherwise, Black-76 is the standard.</
 <li><strong>Delta → strike</strong> inversion</li>
 </ul>
 <h3 id="21-ice-tfo-expiry-calendar">2.1 ICE TFO expiry calendar</h3>
-<p>ICE product code: <strong>TFO</strong>. The official rule is:</p>
+<p>ICE product code: <strong>TFO</strong>. Source:
+<a href="https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin">https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin</a>.</p>
+<p>The official rule is:</p>
 <blockquote>
 <p><em>Trading will cease when the intraday settlement price of the underlying
 futures contract is set, five calendar days before the start of the
@@ -620,12 +610,12 @@ in addition to <code>numpy</code> and <code>scipy</code>.</p>
 <tr>
 <td><code>expiry_date</code></td>
 <td><code>date</code></td>
-<td>Options expiry (5 BD before futures LTD)</td>
+<td>ICE TFO option expiry</td>
 </tr>
 <tr>
 <td><code>futures_expiry_date</code></td>
 <td><code>date</code></td>
-<td>Futures last trading day</td>
+<td>Underlying TTF futures last trading day</td>
 </tr>
 <tr>
 <td><code>contract_code</code></td>
@@ -635,26 +625,40 @@ in addition to <code>numpy</code> and <code>scipy</code>.</p>
 <tr>
 <td><code>T</code></td>
 <td><code>float</code></td>
-<td>Time to options expiry in years (ACT/365, today included)</td>
+<td>Calendar days to option expiry / 365</td>
 </tr>
 </tbody>
 </table>
 <h3 id="32-ttfexpirycalendar">3.2 <code>TTFExpiryCalendar</code></h3>
-<p>Manages the ICE/EEX TTF calendar starting from an arbitrary reference date.</p>
+<p>Convenience class wrapping the official <strong>ICE TFO</strong> rule (product code
+<strong>TFO</strong>) so it can be used with a fixed reference date. All expiry dates
+delegate to <code>ttf_expiry_date</code> from <code>black76_ttf</code>, so the calendar always
+matches the spec:</p>
+<blockquote>
+<p><em>Trading will cease when the intraday settlement price of the underlying
+futures contract is set, five calendar days before the start of the
+contract month. If that day is a non-business day or non-UK business
+day, expiry will occur on the nearest prior business day, except where
+that day is also the expiry date of the underlying futures contract, in
+which case expiry will occur on the preceding business day.</em></p>
+</blockquote>
+<p>Source: <a href="https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin">https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin</a>.
+The holiday calendar is <strong>UK public holidays</strong> (England &amp; Wales) only.</p>
 <pre><code class="language-python">from datetime import date
 from ttf_market_data import TTFExpiryCalendar
 
 cal = TTFExpiryCalendar(reference_date=date(2026, 4, 20))
 </code></pre>
 <h4 id="futures_expiry_datedelivery_year-delivery_month-date"><code>futures_expiry_date(delivery_year, delivery_month) -&gt; date</code></h4>
-<p>Last business day of the month preceding delivery.</p>
+<p>Last UK business day of the month immediately before the contract month.</p>
 <pre><code class="language-python">cal.futures_expiry_date(2026, 6)   # TTFM26
 # -&gt; date(2026, 5, 29)             (Friday)
 </code></pre>
 <h4 id="expiry_datedelivery_year-delivery_month-date"><code>expiry_date(delivery_year, delivery_month) -&gt; date</code></h4>
-<p>Options expiry: 5 business days before the futures LTD.</p>
+<p>ICE TFO option expiry. Delegates directly to
+<code>black76_ttf.ttf_expiry_date(delivery_month, delivery_year)</code>.</p>
 <pre><code class="language-python">cal.expiry_date(2026, 6)
-# -&gt; date(2026, 5, 22)
+# -&gt; date(2026, 5, 27)             (Wed)
 </code></pre>
 <h4 id="contract_codedelivery_year-delivery_month-str"><code>contract_code(delivery_year, delivery_month) -&gt; str</code></h4>
 <p>Returns the ICE-style code (<code>TTF</code> + month code letter + last two digits of the
@@ -663,10 +667,10 @@ year).</p>
 cal.contract_code(2027, 12)        # -&gt; &quot;TTFZ27&quot;
 </code></pre>
 <h4 id="time_to_expiryexpiry-float"><code>time_to_expiry(expiry) -&gt; float</code></h4>
-<p>Time <code>T</code> in years (ACT/365, reference date included). Returns <code>0</code> if the expiry
-is already in the past.</p>
-<pre><code class="language-python">cal.time_to_expiry(date(2026, 5, 22))
-# -&gt; 0.0904   (33 days / 365)
+<p>Time <code>T</code> = <code>(expiry − reference).days / 365</code> (calendar days only). Returns
+<code>0</code> if the expiry is already in the past.</p>
+<pre><code class="language-python">cal.time_to_expiry(date(2026, 5, 27))
+# -&gt; 0.1014   (37 days / 365)
 </code></pre>
 <h4 id="active_contractsn12-listttfcontract"><code>active_contracts(n=12) -&gt; list[TTFContract]</code></h4>
 <p>The next <code>n</code> monthly TTF contracts (sorted ascending), skipping any whose
@@ -674,9 +678,9 @@ expiry has already passed relative to the reference date.</p>
 <pre><code class="language-python">contracts = cal.active_contracts(n=3)
 for c in contracts:
     print(c.contract_code, c.expiry_date, round(c.T, 4))
-# TTFK26  2026-04-24  0.0137
-# TTFM26  2026-05-22  0.0904
-# TTFN26  2026-06-23  0.1781
+# TTFK26  2026-04-24  0.0110
+# TTFM26  2026-05-27  0.0932
+# TTFN26  2026-06-26  0.1753
 </code></pre>
 <h4 id="expiry_for_tenortenor_years-date"><code>expiry_for_tenor(tenor_years) -&gt; date</code></h4>
 <p>Returns the expiry date of the contract closest to a given tenor expressed in
@@ -2202,6 +2206,4 @@ the dashboard.</p>
 </tbody>
 </table>
 <p>PCP check: <code>C − P = 6.352943 = e^(-rT)·(F_TTF − F_HH)</code>, verified to
-<code>&lt; 1e-8 USD/MMBtu</code>.</p>
-</body>
-</html>
+<code>&lt; 1e-8 USD/MMBtu</code>.</p></body></html>
