@@ -10,7 +10,7 @@ This library implements industry-standard models for energy derivatives:
 - **Bachelier** — normal-distribution model for low or negative price environments
 - **Monte Carlo** and **Binomial Tree** — for exotic/American options
 - **SABR calibration** — fits the implied vol smile from market data
-- TTF-specific expiry calendar following ICE/EEX conventions (options expire 5 business days before futures LTD)
+- ICE TFO (TTF Options) expiry calendar — official rule, UK business-day calendar
 
 ## Features
 
@@ -70,8 +70,9 @@ from black76_ttf import (
     b76_greeks, b76_implied_vol,         # Greeks and implied vol
     b76_price_ttf, bach_price_ttf,       # Pricing by contract code
     bach_call, bach_put, bach_greeks,    # Bachelier (normal vol)
-    options_expiry_from_delivery,        # Expiry calendar
-    t_from_contract, t_from_delivery,    # Time-to-maturity
+    ttf_expiry_date, ttf_time_to_expiry, # ICE TFO expiry calendar
+    ttf_is_business_day, ttf_next_expiries,
+    t_from_contract,                     # Contract-name → T (calendar/365)
 )
 ```
 
@@ -234,14 +235,41 @@ See **[user_manual.md](user_manual.md)** for:
 
 ## Expiry Calendar
 
-TTF options follow ICE/EEX conventions:
+TTF options follow the official **ICE TFO** (TTF Options) contract rule.
+ICE product code: **TFO**.
 
-| Contract | Futures LTD | Options Expiry |
-|----------|------------|----------------|
-| Jun-26 | 29 May 2026 | 22 May 2026 |
-| Jul-26 | 30 Jun 2026 | 23 Jun 2026 |
+> *Trading will cease when the intraday settlement price of the underlying
+> futures contract is set, five calendar days before the start of the
+> contract month. If that day is a non-business day or non-UK business day,
+> expiry will occur on the nearest prior business day, except where that day
+> is also the expiry date of the underlying futures contract, in which case
+> expiry will occur on the preceding business day.*
 
-Options expire **5 business days before** the futures last trading day. `t_from_contract()` and `b76_price_ttf()` use this calendar automatically.
+The implementation uses a **UK business-day calendar** (England & Wales
+public holidays only — New Year, Good Friday, Easter Monday, the early-May,
+spring and summer bank holidays, Christmas Day, Boxing Day, with the
+standard substitution to the next weekday when a fixed-date holiday falls
+on a weekend).
+
+Computed expiries for monthly contracts in 2026:
+
+| Contract | Futures LTD | Option Expiry | Day |
+|----------|-------------|---------------|-----|
+| Jan-26 | 31 Dec 2025 | 24 Dec 2025 | Wed |
+| Feb-26 | 30 Jan 2026 | 27 Jan 2026 | Tue |
+| Mar-26 | 27 Feb 2026 | 24 Feb 2026 | Tue |
+| Apr-26 | 31 Mar 2026 | 27 Mar 2026 | Fri |
+| May-26 | 30 Apr 2026 | 24 Apr 2026 | Fri |
+| Jun-26 | 29 May 2026 | 27 May 2026 | Wed |
+| Jul-26 | 30 Jun 2026 | 26 Jun 2026 | Fri |
+| Aug-26 | 31 Jul 2026 | 27 Jul 2026 | Mon |
+| Sep-26 | 28 Aug 2026 | 27 Aug 2026 | Thu |
+| Oct-26 | 30 Sep 2026 | 25 Sep 2026 | Fri |
+| Nov-26 | 30 Oct 2026 | 27 Oct 2026 | Tue |
+| Dec-26 | 30 Nov 2026 | 26 Nov 2026 | Thu |
+
+`ttf_expiry_date()`, `ttf_time_to_expiry()`, `ttf_next_expiries()`,
+`t_from_contract()` and `b76_price_ttf()` all use this calendar.
 
 ## Requirements
 
