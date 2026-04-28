@@ -108,6 +108,77 @@ from pricing.greeks import b76_delta, b76_gamma, b76_vega
 from pricing.implied_vol import b76_implied_vol_brent
 ```
 
+## Vol Surface & Interpolation
+
+### What is a vol surface?
+
+A **volatility surface** is the set of implied vols quoted across strikes (the *smile*) and maturities (the *term structure*). For each (strike, maturity) point, the market quotes a Black-76 implied vol, and any option whose strike or expiry sits between quoted points needs a vol from interpolation.
+
+For TTF options this matters because:
+
+- Pricing a non-standard strike (e.g. 27.50 EUR/MWh) requires a vol that isn't directly quoted.
+- Risk metrics (delta-bucketed Greeks, vega ladders, scenario P&L) need a continuous σ(K, T).
+- Structured products (collars, calendar spreads, swaptions) reference vols at multiple points and break if the surface is inconsistent.
+
+### Smile interpolation
+
+Across strikes, `get_vol_by_strike(F, K, T, vol_surface)` uses a **natural cubic spline** between the quoted points, with **flat extrapolation** outside the wings. Across maturities, vols are interpolated linearly after the strike-level interpolation.
+
+Why cubic spline:
+
+- **Smooth** — C² continuity, so dσ/dK and d²σ/dK² are continuous (matters for vanna and volga).
+- **Local** — interpolated values stay between neighbouring quotes, so adjacent points don't induce arbitrage at the smile level.
+- **No parametric assumptions** — fits the quoted points exactly, unlike SABR or SVI which trade fit for stability.
+
+Cubic *extrapolation* of vols is unstable (smile polynomials can swing into negative or explosive vols beyond the wings), so strikes outside the quoted range are clamped to the nearest wing vol.
+
+### Delta-to-strike conversion
+
+`get_vol_by_delta(F, delta, T, vol_surface, r)` converts a delta target (e.g. `0.25` for 25Δ call, `-0.25` for 25Δ put, `0.50` for ATM-equivalent) to a strike using **Black-76 delta inversion**:
+
+```
+delta_call = e^(-rT) · N(d1)
+delta_put  = -e^(-rT) · N(-d1)
+where d1 = [ln(F/K) + 0.5·σ²·T] / (σ·√T)
+```
+
+The strike consistent with a given delta depends on the unknown vol, so the routine runs a fixed-point iteration: seed with the ATM vol, invert delta → K at fixed σ via `brentq`, look up σ' = vol(K, T) from the surface, repeat until σ converges.
+
+For ATM, the **delta-neutral straddle (ATM-DN)** convention is `K = F · exp(-σ²·T / 2)`, which is the strike where call and put deltas are equal in magnitude. This is the market-standard ATM definition for FX and energy options and is implicit in the iteration above when `delta = 0.50`.
+
+### TTF surface characteristics
+
+A typical TTF vol surface has:
+
+- **Downside skew** — OTM puts trade at higher implied vols than OTM calls. The 25Δ put vol is typically ~3–5 vol points above the 25Δ call vol.
+- **Term-structure decay** — short-dated vols are higher than long-dated vols. Sample levels in `SAMPLE_TTF_VOL_SURFACE`:
+
+  | Tenor | ATM vol |
+  |-------|---------|
+  | 1M    | ~55%    |
+  | 3M    | ~50%    |
+  | 6M    | ~46%    |
+  | 12M   | ~42%    |
+
+The downside skew reflects an **asymmetric supply-disruption risk**: gas prices can spike sharply on cold weather, pipeline outages, or geopolitical events, while upside is bounded by demand destruction and storage capacity. Hedgers (utilities, industrials) systematically buy downside protection, pushing OTM put vols above OTM call vols.
+
+### Limitations
+
+- **No SABR or SVI parametrization.** Smile interpolation is purely numerical (cubic spline). For risk-neutral density extraction or extrapolation past the wings, use the SABR calibration in `MarketCalibration` instead.
+- **No arbitrage-free constraints enforced.** Cubic splines do not guarantee monotonic call prices in K (no calendar arbitrage) or non-negative butterfly spreads. A pathological input surface can produce arbitrageable interpolated vols.
+- **Wing extrapolation is flat.** Vols beyond the quoted strike range are clamped to the boundary value, which underestimates wing vols for far-OTM options. Quote a wider strike grid, or use SABR, if you need accurate tail pricing.
+- **Linear in maturity, not in variance.** Term-structure interpolation is linear in σ rather than in σ²·T (total variance), which is acceptable for short tenor gaps but can introduce small calendar arbitrages over wide gaps.
+
+```python
+from ttf_market_data import (
+    SAMPLE_TTF_VOL_SURFACE, get_vol_by_strike, get_vol_by_delta,
+)
+
+F, T, r = 30.0, 0.25, 0.03
+sigma_K  = get_vol_by_strike(F, K=27.5, T=T, vol_surface=SAMPLE_TTF_VOL_SURFACE)
+sigma_25p = get_vol_by_delta(F, delta=-0.25, T=T, vol_surface=SAMPLE_TTF_VOL_SURFACE, r=r)
+```
+
 ## Dashboard
 
 The interactive React dashboard visualises prices, Greeks, and vol surfaces.
