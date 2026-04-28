@@ -27,7 +27,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import requests
-from scipy.interpolate import RectBivariateSpline, interp1d
+from scipy.interpolate import CubicSpline, RectBivariateSpline, interp1d
 from scipy.optimize import minimize, brentq
 from scipy.stats import norm
 
@@ -572,7 +572,145 @@ class MarketCalibration:
 
 
 # ---------------------------------------------------------------------------
-# 5. Export utilities
+# 5. Vol surface interpolation (strike- and delta-based)
+# ---------------------------------------------------------------------------
+
+# Sample TTF vol surface around F = 30 EUR/MWh.
+# Vols around 50% with a downside skew (higher vol for OTM puts), and a
+# decreasing term structure (typical for energy markets).
+SAMPLE_TTF_VOL_SURFACE: dict[float, dict[float, float]] = {
+    1 / 12: {  # 1M
+        20.0: 0.72, 25.0: 0.62, 28.0: 0.57, 30.0: 0.55,
+        32.0: 0.54, 35.0: 0.55, 40.0: 0.58,
+    },
+    3 / 12: {  # 3M
+        20.0: 0.65, 25.0: 0.56, 28.0: 0.52, 30.0: 0.50,
+        32.0: 0.49, 35.0: 0.50, 40.0: 0.53,
+    },
+    6 / 12: {  # 6M
+        20.0: 0.58, 25.0: 0.51, 28.0: 0.48, 30.0: 0.46,
+        32.0: 0.45, 35.0: 0.46, 40.0: 0.49,
+    },
+    1.0: {     # 12M
+        20.0: 0.52, 25.0: 0.46, 28.0: 0.43, 30.0: 0.42,
+        32.0: 0.41, 35.0: 0.42, 40.0: 0.45,
+    },
+}
+
+
+def _interp_smile(K: float, strikes: list[float], vols: list[float]) -> float:
+    """Cubic-spline interpolation across a single smile, flat extrapolation in the wings.
+
+    Cubic extrapolation of vol smiles is unstable far from the quoted range and
+    can produce negative or explosive vols, so we clamp K to [k_min, k_max].
+    """
+    if len(strikes) == 1:
+        return float(vols[0])
+    K_clamped = min(max(K, strikes[0]), strikes[-1])
+    if len(strikes) >= 4:
+        cs = CubicSpline(strikes, vols, bc_type="natural", extrapolate=False)
+        return float(cs(K_clamped))
+    return float(np.interp(K_clamped, strikes, vols))
+
+
+def get_vol_by_strike(
+    F: float,
+    K: float,
+    T: float,
+    vol_surface: dict[float, dict[float, float]],
+) -> float:
+    """Implied vol for a given strike K and maturity T.
+
+    Vol is cubic-spline interpolated across strikes within each smile, then
+    linearly interpolated across maturities.
+
+    Parameters
+    ----------
+    F : forward price (unused here but kept for API symmetry with delta-based)
+    K : strike
+    T : maturity (years)
+    vol_surface : dict {maturity: {strike: implied_vol}}
+    """
+    if not vol_surface:
+        raise ValueError("vol_surface is empty")
+
+    maturities = sorted(vol_surface.keys())
+    vols_at_K: list[float] = []
+    for m in maturities:
+        smile = vol_surface[m]
+        strikes = sorted(smile.keys())
+        vols = [smile[k] for k in strikes]
+        vols_at_K.append(_interp_smile(K, strikes, vols))
+
+    if len(maturities) == 1:
+        return vols_at_K[0]
+    if T <= maturities[0]:
+        return vols_at_K[0]
+    if T >= maturities[-1]:
+        return vols_at_K[-1]
+    return float(np.interp(T, maturities, vols_at_K))
+
+
+def _b76_delta_to_strike(
+    delta: float, F: float, T: float, sigma: float, r: float = 0.0
+) -> float:
+    """Invert Black-76 delta to obtain the strike at a fixed sigma.
+
+    Convention: delta > 0 → call (spot delta in [0, e^{-rT}]),
+                delta < 0 → put  (spot delta in [-e^{-rT}, 0]).
+    """
+    if sigma <= 0 or T <= 0:
+        raise ValueError("sigma and T must be strictly positive")
+    sign = 1 if delta > 0 else -1
+    df = math.exp(-r * T)
+
+    def f(K: float) -> float:
+        if K <= 0:
+            return -abs(delta)
+        d1 = (math.log(F / K) + 0.5 * sigma**2 * T) / (sigma * math.sqrt(T))
+        d_model = sign * df * norm.cdf(sign * d1)
+        return d_model - delta
+
+    return float(brentq(f, F * 1e-3, F * 1e3, xtol=1e-8, maxiter=200))
+
+
+def get_vol_by_delta(
+    F: float,
+    delta: float,
+    T: float,
+    vol_surface: dict[float, dict[float, float]],
+    r: float = 0.0,
+) -> float:
+    """Implied vol for a given Black-76 delta and maturity T.
+
+    The strike consistent with *delta* depends on the unknown vol, so a fixed-
+    point iteration is used: start from an ATM-vol guess, solve K = K(delta, σ),
+    look up σ' = vol(K, T), and repeat until convergence.
+
+    Parameters
+    ----------
+    F : forward price
+    delta : signed delta — e.g. 0.25 (25Δ call), -0.25 (25Δ put), 0.50 (ATM)
+    T : maturity (years)
+    vol_surface : dict {maturity: {strike: implied_vol}}
+    r : risk-free rate (annualised, continuous)
+    """
+    if not -1.0 < delta < 1.0 or delta == 0.0:
+        raise ValueError(f"delta must be in (-1, 0) ∪ (0, 1), got {delta}")
+
+    sigma = get_vol_by_strike(F, F, T, vol_surface)  # ATM seed
+    for _ in range(50):
+        K = _b76_delta_to_strike(delta, F, T, sigma, r)
+        new_sigma = get_vol_by_strike(F, K, T, vol_surface)
+        if abs(new_sigma - sigma) < 1e-8:
+            sigma = new_sigma
+            break
+        sigma = new_sigma
+    return sigma
+
+
+# ---------------------------------------------------------------------------
+# 6. Export utilities
 # ---------------------------------------------------------------------------
 
 def export_forward_curve(curve: TTFForwardCurve, path: str) -> None:
