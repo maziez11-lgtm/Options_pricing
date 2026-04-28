@@ -20,6 +20,8 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from typing import Optional
@@ -30,6 +32,13 @@ import requests
 from scipy.interpolate import CubicSpline, RectBivariateSpline, interp1d
 from scipy.optimize import minimize, brentq
 from scipy.stats import norm
+
+# Make sibling modules importable when this file is run from another cwd.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from black76_ttf import ttf_expiry_date, ttf_time_to_expiry  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -787,6 +796,285 @@ def export_all(
         "vol_surface": surface.to_dataframe(),
         "sabr_params": calibration.to_dataframe(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Manual / CSV TTF forward curve loader and vol-surface utilities
+# ---------------------------------------------------------------------------
+#
+# These helpers complement the live Yahoo loader above. They expose a small
+# manual-input surface for analytics notebooks: feed a dict (or CSV) of
+# (delivery_month, forward_price), get back a tidy DataFrame indexed on the
+# official ICE TFO expiry calendar.
+#
+# Expiries and time-to-expiry come from black76_ttf — never recompute them
+# locally.
+
+_MONTH_FROM_ABBR = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _parse_delivery_month(label: str) -> tuple[int, int]:
+    """Parse a delivery month label like 'Jun-26' or 'Jun-2026'.
+
+    Returns ``(month, year)`` with a 4-digit year.
+    """
+    s = str(label).strip().replace(" ", "")
+    if "-" not in s:
+        raise ValueError(
+            f"Cannot parse delivery month '{label}'. "
+            "Expected format 'Mon-YY' or 'Mon-YYYY' (e.g. 'Jun-26')."
+        )
+    abbr, year_str = s.split("-", 1)
+    month = _MONTH_FROM_ABBR.get(abbr.lower())
+    if month is None:
+        raise ValueError(f"Unknown month abbreviation '{abbr}' in '{label}'.")
+    yr = int(year_str)
+    year = yr if yr > 100 else 2000 + yr
+    return month, year
+
+
+# Sample TTF forward curve, Jun-26 → Dec-27, EUR/MWh.
+# Realistic seasonal shape: winter peaks (Dec/Jan) ≈ 35, summer troughs ≈ 28-29.
+SAMPLE_TTF_FORWARD_CURVE: dict[str, float] = {
+    "Jun-26": 28.50,
+    "Jul-26": 29.00,
+    "Aug-26": 30.20,
+    "Sep-26": 31.50,
+    "Oct-26": 33.20,
+    "Nov-26": 34.50,
+    "Dec-26": 35.20,
+    "Jan-27": 35.00,
+    "Feb-27": 34.20,
+    "Mar-27": 32.50,
+    "Apr-27": 30.80,
+    "May-27": 29.50,
+    "Jun-27": 29.00,
+    "Jul-27": 29.50,
+    "Aug-27": 30.50,
+    "Sep-27": 31.80,
+    "Oct-27": 33.50,
+    "Nov-27": 34.50,
+    "Dec-27": 35.00,
+}
+
+
+def load_ttf_forward_curve(
+    source: str = "manual",
+    data: Optional[dict[str, float]] = None,
+    filepath: Optional[str] = None,
+    reference: Optional[date] = None,
+) -> pd.DataFrame:
+    """Load a TTF forward curve from a dict or a CSV.
+
+    Parameters
+    ----------
+    source : {'manual', 'csv'}
+        - 'manual' : use ``data`` (dict of ``{delivery_month: forward_price}``).
+                     If ``data`` is None, falls back to ``SAMPLE_TTF_FORWARD_CURVE``.
+        - 'csv'    : read ``filepath`` (columns: delivery_month, forward_price).
+    data : dict
+        Manual forward dictionary, e.g. ``{'Jun-26': 30.5, 'Jul-26': 31.2}``.
+    filepath : str
+        Path to the CSV when ``source='csv'``.
+    reference : date, optional
+        Valuation date for time-to-expiry; defaults to today.
+
+    Returns
+    -------
+    pd.DataFrame with columns:
+        delivery_month, expiry_date, time_to_expiry, forward_price
+    """
+    if source == "manual":
+        rows = (data if data is not None else SAMPLE_TTF_FORWARD_CURVE).items()
+    elif source == "csv":
+        if not filepath:
+            raise ValueError("filepath is required when source='csv'.")
+        df_csv = pd.read_csv(filepath)
+        cols = {c.lower().strip(): c for c in df_csv.columns}
+        if "delivery_month" not in cols or "forward_price" not in cols:
+            raise ValueError(
+                "CSV must contain columns 'delivery_month' and 'forward_price'."
+            )
+        rows = list(zip(df_csv[cols["delivery_month"]],
+                        df_csv[cols["forward_price"]]))
+    else:
+        raise ValueError(f"source must be 'manual' or 'csv', got '{source}'")
+
+    ref = reference or date.today()
+    records = []
+    for label, price in rows:
+        month, year = _parse_delivery_month(str(label))
+        exp = ttf_expiry_date(month, year)
+        T = ttf_time_to_expiry(month, year, reference=ref)
+        records.append({
+            "delivery_month": str(label),
+            "expiry_date": exp,
+            "time_to_expiry": round(T, 6),
+            "forward_price": float(price),
+        })
+    return pd.DataFrame.from_records(records)
+
+
+# Sample TTF vol surface keyed by call-delta pillar.
+# Downside skew (vol higher at lower strikes ⇔ at higher call deltas).
+# Term decay: ATM ≈ 50% short term → ≈ 37% at 1.5y.
+SAMPLE_VOL_SURFACE: dict[str, dict[float, float]] = {
+    "Jun-26": {0.10: 0.43, 0.25: 0.47, 0.50: 0.50, 0.75: 0.53, 0.90: 0.57},
+    "Jul-26": {0.10: 0.42, 0.25: 0.46, 0.50: 0.49, 0.75: 0.52, 0.90: 0.56},
+    "Aug-26": {0.10: 0.41, 0.25: 0.45, 0.50: 0.48, 0.75: 0.51, 0.90: 0.55},
+    "Sep-26": {0.10: 0.40, 0.25: 0.44, 0.50: 0.47, 0.75: 0.50, 0.90: 0.54},
+    "Oct-26": {0.10: 0.39, 0.25: 0.43, 0.50: 0.46, 0.75: 0.49, 0.90: 0.53},
+    "Nov-26": {0.10: 0.38, 0.25: 0.42, 0.50: 0.45, 0.75: 0.48, 0.90: 0.52},
+    "Dec-26": {0.10: 0.37, 0.25: 0.41, 0.50: 0.44, 0.75: 0.47, 0.90: 0.51},
+    "Jan-27": {0.10: 0.36, 0.25: 0.40, 0.50: 0.43, 0.75: 0.46, 0.90: 0.50},
+    "Feb-27": {0.10: 0.35, 0.25: 0.39, 0.50: 0.42, 0.75: 0.45, 0.90: 0.49},
+    "Mar-27": {0.10: 0.34, 0.25: 0.38, 0.50: 0.41, 0.75: 0.44, 0.90: 0.48},
+    "Apr-27": {0.10: 0.33, 0.25: 0.37, 0.50: 0.40, 0.75: 0.43, 0.90: 0.47},
+    "May-27": {0.10: 0.33, 0.25: 0.37, 0.50: 0.40, 0.75: 0.43, 0.90: 0.47},
+    "Jun-27": {0.10: 0.32, 0.25: 0.36, 0.50: 0.39, 0.75: 0.42, 0.90: 0.46},
+    "Jul-27": {0.10: 0.32, 0.25: 0.36, 0.50: 0.39, 0.75: 0.42, 0.90: 0.46},
+    "Aug-27": {0.10: 0.32, 0.25: 0.36, 0.50: 0.39, 0.75: 0.42, 0.90: 0.46},
+    "Sep-27": {0.10: 0.31, 0.25: 0.35, 0.50: 0.38, 0.75: 0.41, 0.90: 0.45},
+    "Oct-27": {0.10: 0.31, 0.25: 0.35, 0.50: 0.38, 0.75: 0.41, 0.90: 0.45},
+    "Nov-27": {0.10: 0.31, 0.25: 0.35, 0.50: 0.38, 0.75: 0.41, 0.90: 0.45},
+    "Dec-27": {0.10: 0.30, 0.25: 0.34, 0.50: 0.37, 0.75: 0.40, 0.90: 0.44},
+}
+
+ATM_DELTA_PILLAR = 0.50
+
+
+def update_vol_surface(
+    forward_curve: pd.DataFrame,
+    vol_surface: dict[str, dict[float, float]],
+) -> pd.DataFrame:
+    """Combine a forward curve with a delta-quoted vol surface.
+
+    For each (delivery_month, delta-pillar, vol):
+      - At the ATM pillar (0.50), the strike uses the delta-neutral rule
+        ``K_atm = F · exp(-σ²T / 2)``.
+      - At any other pillar, the strike is the Black-76 inversion of the call
+        delta: ``K = F · exp(0.5σ²T − Φ⁻¹(δ)·σ√T)``.
+      - The realised Black-76 forward call delta is then re-computed at that
+        (K, σ) pair so the output is internally consistent.
+
+    Parameters
+    ----------
+    forward_curve : DataFrame from :func:`load_ttf_forward_curve`.
+    vol_surface   : dict ``{delivery_month: {call_delta_pillar: vol}}``.
+
+    Returns
+    -------
+    DataFrame with columns:
+        delivery_month, expiry_date, time_to_expiry, forward_price,
+        strike, implied_vol, delta, moneyness
+
+    The input delta pillar is retained as a hidden ``delta_pillar`` column so
+    that :func:`display_vol_surface` can pivot on the smile axis the surface
+    was quoted on (the model ``delta`` recomputed at the ATM-DN strike drifts
+    above 0.50 with maturity, so it is unsuitable for grid display).
+    """
+    rows = []
+    fc = forward_curve.set_index("delivery_month")
+
+    for cm, smile in vol_surface.items():
+        if cm not in fc.index:
+            continue
+        F = float(fc.loc[cm, "forward_price"])
+        T = float(fc.loc[cm, "time_to_expiry"])
+        exp = fc.loc[cm, "expiry_date"]
+
+        for delta_pillar, sigma in smile.items():
+            sigma = float(sigma)
+            if T <= 0 or sigma <= 0:
+                continue
+
+            if math.isclose(delta_pillar, ATM_DELTA_PILLAR):
+                K = F * math.exp(-0.5 * sigma * sigma * T)
+            else:
+                d1_target = norm.ppf(delta_pillar)
+                K = F * math.exp(0.5 * sigma * sigma * T
+                                 - d1_target * sigma * math.sqrt(T))
+
+            d1 = (math.log(F / K) + 0.5 * sigma * sigma * T) / (sigma * math.sqrt(T))
+            model_delta = float(norm.cdf(d1))
+
+            rows.append({
+                "delivery_month": cm,
+                "expiry_date": exp,
+                "time_to_expiry": round(T, 6),
+                "forward_price": F,
+                "strike": round(K, 4),
+                "implied_vol": sigma,
+                "delta": round(model_delta, 4),
+                "moneyness": round(K / F, 4),
+                "delta_pillar": float(delta_pillar),
+            })
+
+    df = pd.DataFrame.from_records(rows)
+    if not df.empty:
+        df = df.sort_values(["time_to_expiry", "strike"]).reset_index(drop=True)
+    return df
+
+
+def display_vol_surface(vol_surface_df: pd.DataFrame) -> pd.DataFrame:
+    """Pretty-print a vol-surface DataFrame as a maturity × delta grid.
+
+    Rows are delivery months (sorted by maturity), columns are the call-delta
+    pillars rendered as e.g. ``"Δ=0.25"``. The ATM column is suffixed with
+    ``"(ATM)"`` and asterisks in the printed table; vols are formatted as
+    percentages with one decimal place.
+
+    The function prints the formatted grid to stdout and returns the same
+    pivot as a DataFrame of ``"%`-formatted strings, ready for further export.
+    """
+    if vol_surface_df.empty:
+        print("(empty vol surface)")
+        return pd.DataFrame()
+
+    df = vol_surface_df.copy()
+    if "delta_pillar" not in df.columns:
+        # Fallback: bucket the model delta to the nearest standard pillar.
+        choices = [0.10, 0.25, 0.50, 0.75, 0.90]
+        df["delta_pillar"] = df["delta"].apply(
+            lambda d: min(choices, key=lambda p: abs(p - d))
+        )
+
+    pivot = df.pivot_table(
+        index="delivery_month",
+        columns="delta_pillar",
+        values="implied_vol",
+        aggfunc="first",
+    )
+
+    # Order rows by maturity.
+    order = (df.sort_values("time_to_expiry")["delivery_month"]
+               .drop_duplicates().tolist())
+    pivot = pivot.reindex(order)
+
+    fmt = lambda v: f"{v * 100:5.1f}%" if pd.notna(v) else "  -  "
+    formatter = pivot.map if hasattr(pivot, "map") else pivot.applymap
+    formatted = formatter(fmt)
+
+    def col_label(d: float) -> str:
+        if math.isclose(d, ATM_DELTA_PILLAR):
+            return f"Δ={d:.2f} (ATM)"
+        return f"Δ={d:.2f}"
+
+    formatted.columns = [col_label(c) for c in formatted.columns]
+    formatted.index.name = "Delivery"
+
+    # Star-banner the ATM column for terminals.
+    print()
+    print("TTF vol surface — rows: maturity, cols: call-delta pillar")
+    print("ATM column is the delta-neutral strike (K = F·exp(−σ²T/2))")
+    print()
+    print(formatted.to_string())
+    print()
+
+    return formatted
 
 
 # ---------------------------------------------------------------------------

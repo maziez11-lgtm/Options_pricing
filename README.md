@@ -180,6 +180,79 @@ sigma_K  = get_vol_by_strike(F, K=27.5, T=T, vol_surface=SAMPLE_TTF_VOL_SURFACE)
 sigma_25p = get_vol_by_delta(F, delta=-0.25, T=T, vol_surface=SAMPLE_TTF_VOL_SURFACE, r=r)
 ```
 
+## Manual Forward Curve & Vol Surface
+
+`ttf_market_data.py` exposes a small set of helpers for working with a
+hand-typed (or CSV-fed) forward curve, with the **ICE TFO** expiry calendar
+imported directly from `black76_ttf` so the dates always match the official
+contract rule.
+
+### `load_ttf_forward_curve(source='manual', data=None, filepath=None, reference=None)`
+
+Two input modes:
+
+```python
+from ttf_market_data import load_ttf_forward_curve
+
+# 1. Manual — pass a {delivery_month: forward_price} dict
+fc = load_ttf_forward_curve(
+    source="manual",
+    data={"Jun-26": 30.5, "Jul-26": 31.2, "Aug-26": 32.0},
+)
+
+# 2. CSV — a file with columns (delivery_month, forward_price)
+fc = load_ttf_forward_curve(source="csv", filepath="ttf_forwards.csv")
+```
+
+Output columns: `delivery_month`, `expiry_date`, `time_to_expiry`,
+`forward_price`. `expiry_date` comes from `ttf_expiry_date()` and
+`time_to_expiry` from `ttf_time_to_expiry()` (calendar days / 365).
+
+Calling `load_ttf_forward_curve()` with no arguments returns the bundled
+sample curve `SAMPLE_TTF_FORWARD_CURVE` (Jun-26 → Dec-27, EUR/MWh, with a
+realistic seasonal shape: winter peaks ≈ 35, summer troughs ≈ 28).
+
+### `update_vol_surface(forward_curve, vol_surface)`
+
+Joins a delta-quoted vol surface with the forward curve. For each
+`(delivery_month, call-delta pillar, vol)` triple it computes:
+
+- **Strike** — at the ATM pillar (Δ = 0.50), the delta-neutral rule
+  `K_atm = F · exp(-σ²T / 2)`. At any other pillar, the Black-76 inversion
+  `K = F · exp(0.5σ²T − Φ⁻¹(δ)·σ·√T)`.
+- **Delta** — re-computed under Black-76 at that `(K, σ)` so the row is
+  internally consistent.
+- **Moneyness** — `K / F`.
+
+```python
+from ttf_market_data import update_vol_surface, SAMPLE_VOL_SURFACE
+vs = update_vol_surface(fc, SAMPLE_VOL_SURFACE)
+# columns: delivery_month, expiry_date, time_to_expiry, forward_price,
+#          strike, implied_vol, delta, moneyness, delta_pillar
+```
+
+`SAMPLE_VOL_SURFACE` is a TTF-style downside-skew surface across the same
+19 contracts: ATM ≈ 50% short term, ≈ 37% at ~1.5y, with a 10-Δ-call to
+90-Δ-call wing spread of about 14 vol points (puts richer than calls).
+
+### `display_vol_surface(vol_surface_df)`
+
+Pretty-prints the surface as a clean maturity × delta grid. Vols are
+formatted as percentages, the ATM column is suffixed with `(ATM)`, and the
+function returns the formatted pivot for further export.
+
+```text
+TTF vol surface — rows: maturity, cols: call-delta pillar
+ATM column is the delta-neutral strike (K = F·exp(−σ²T/2))
+
+          Δ=0.10  Δ=0.25 Δ=0.50 (ATM)  Δ=0.75  Δ=0.90
+Delivery
+Jun-26     43.0%   47.0%        50.0%   53.0%   57.0%
+Jul-26     42.0%   46.0%        49.0%   52.0%   56.0%
+...
+Dec-27     30.0%   34.0%        37.0%   40.0%   44.0%
+```
+
 ## Dashboard
 
 The interactive React dashboard visualises prices, Greeks, and vol surfaces.
