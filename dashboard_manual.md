@@ -172,6 +172,10 @@ A side-by-side table compares Black-76 and Bachelier for both call and put,
 plus a put-call parity check (`C − P` vs `e^(−rT)·(F − K)`). The error column
 should be ~`1e-12` — anything bigger means a bug.
 
+![TTF Jun-26 — Delta and Gamma vs strike](charts/greeks_example.png)
+
+![TTF Jun-26 — Call & Put price curves](charts/pricer_example.png)
+
 ### 2.4 Worked example — TTF Jun-26 call
 
 Suppose today is 29 April 2026 and you want to price a **TTF Jun-26 30-day
@@ -276,6 +280,8 @@ Interpretation: you make money only if Jun-26 closes **below 26.58** or
 exactly at 30 you lose the whole 3.42 EUR/MWh. For one lot (720 MWh) max
 loss ≈ `3.42 × 720 ≈ 2 460 EUR`. Each EUR/MWh past a break-even adds 720 EUR
 of profit.
+
+![Straddle on TTF Jun-26 — P&L at expiry](charts/straddle_example.png)
 
 If you instead expected only an **upside** move, switch to a **Bull call
 spread** (long 30 call / short 32 call) — same view, much cheaper, with
@@ -387,6 +393,8 @@ If the broker shows you a 3M ATM quote of 55 %, scale `Δσ` so that
 that gives `Δσ ≈ (0.55 − 0.38) / exp(−0.5) ≈ 0.28`. Tweak the sliders and
 read the surface back to confirm.
 
+![TTF implied volatility surface — downside skew](charts/vol_surface_example.png)
+
 ---
 
 ## SECTION 5 — TTF/HH Spread Tab
@@ -468,6 +476,8 @@ Expected output:
 Move the **ρ slider** from `+0.99` down to `−0.99` and watch the price climb
 sharply: at ρ = −0.5 the same call is worth roughly twice as much because
 the spread vol is much higher.
+
+![TTF/HH spread call — P&L at expiry](charts/spread_example.png)
 
 ### 5.3 Using the implied-correlation solver
 
