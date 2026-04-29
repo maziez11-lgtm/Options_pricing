@@ -280,3 +280,415 @@ of profit.
 If you instead expected only an **upside** move, switch to a **Bull call
 spread** (long 30 call / short 32 call) — same view, much cheaper, with
 capped profit at `K_hi − K_lo − net premium = 2 − net premium`.
+
+---
+
+## SECTION 4 — Vol Surface Tab
+
+The Vol Surface tab plots the **Black-76 implied volatility surface** of TTF
+options as a 3D surface over **strike** and **maturity**. It is parametric
+(driven by a few sliders) — it doesn't fit market quotes, but it lets you
+explore the **shape** of a realistic TTF surface.
+
+### 4.1 What the vol surface represents
+
+For a given underlying (TTF futures), the implied volatility is **not a single
+number**: it depends on
+- the **option maturity T** (the *term structure* of vol), and
+- the **strike K** relative to the forward (the *smile* / *skew*).
+
+The vol surface is the function `σ(K, T)` collected over all liquid contracts.
+It tells you, for any (strike, maturity) pair, the lognormal vol you must plug
+into Black-76 to recover the market price.
+
+The dashboard parameterises the surface with five inputs:
+
+| Parameter             | Meaning                                                                       |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `σ_inf`               | ATM vol at long maturity (the level the surface decays toward)                |
+| `Δσ`                  | Excess ATM vol on top of `σ_inf` for very short maturities                    |
+| `κ`                   | Decay speed of the ATM term structure: `atm(T) = σ_inf + Δσ · exp(−κT)`        |
+| `skew`                | Linear slope of the smile in log-moneyness `m = ln(K/F)/√T` — usually negative for TTF |
+| `wings`               | Quadratic curvature (the "smile" of the smile)                                |
+
+Final surface: `σ(K, T) = atm(T) + skew · m + wings · m²`.
+
+### 4.2 How to read the 3D chart
+
+- **X axis (Strike, EUR/MWh)** — option strike. The forward `F` sits in the
+  middle of the range; everything to the left is OTM puts / ITM calls,
+  everything to the right is OTM calls / ITM puts.
+- **Y axis (Maturity T, years)** — time to expiry. Front of the chart
+  (small T) is short-dated; back of the chart is multi-year.
+- **Z axis (σ)** — the implied lognormal vol that the surface assigns to
+  that `(K, T)` pair, expressed as a decimal (`0.50` = 50 %).
+- **Colour** — same as height: warmer/yellow = higher vol, darker/blue =
+  lower vol.
+
+What to look for at a glance:
+
+1. The **front edge** (short T) is usually higher than the **back edge** (long
+   T): the term-structure decays from `σ_inf + Δσ` down to `σ_inf`.
+2. Slicing at a fixed `T` should give a **smile**: a U-shape (or hockey-stick)
+   in strike. The minimum sits near ATM in calm markets; for TTF it sits to
+   the **right** of the forward because of the downside skew (see 4.3).
+3. The smile **flattens** as `T` grows — wings shrink because `m = ln(K/F)/√T`
+   shrinks.
+
+### 4.3 TTF downside skew — explained simply
+
+In gas markets, the **downside is much riskier than the upside in volatility
+terms**, even though prices can spike upward in absolute terms. Two reasons:
+
+- A **supply shock** (cold snap, pipeline outage, geopolitical event) sends
+  prices up fast, but on the percentage scale the move is bounded by storage
+  and demand response.
+- A **demand collapse** or **mild winter** can grind the price toward very
+  low levels and prices that approach zero have **infinite lognormal
+  volatility** by construction (`σ` blows up because `ln(K/F)` does).
+
+The market reflects this by quoting **higher implied vol on low strikes**
+(downside puts, low-strike calls) and lower vol on high strikes. On a smile
+chart this appears as a curve that **slopes down** from left (low strike,
+high vol) to right (high strike, low vol). In the dashboard, that downward
+slope corresponds to a **negative `skew`**.
+
+Compare with equity indices: equities have a similar negative skew (crash
+fear). For TTF the slope is steeper short-dated than long-dated, hence the
+need for both a `skew` term and `wings` / convexity.
+
+### 4.4 Worked example — realistic TTF surface
+
+Try the following slider settings, which roughly reproduce a quiet but
+typical TTF surface:
+
+| Parameter      | Value         |
+| -------------- | ------------- |
+| Forward `F`    | `30` EUR/MWh  |
+| `σ_inf`        | `0.38` (38 %) |
+| `Δσ`           | `0.30`        |
+| `κ`            | `2.0`         |
+| `skew`         | `−0.08`       |
+| `wings`        | `0.10`        |
+| Strike range   | `±50 %`       |
+| `T_max`        | `2.0` years   |
+
+What you should see:
+
+- **ATM short-dated vol ≈ 68 %** (`σ_inf + Δσ = 0.38 + 0.30`).
+- **ATM 1-year vol ≈ 42 %** — already much closer to `σ_inf` (`exp(−2 · 1) ≈ 0.14`).
+- **ATM 2-year vol ≈ 39 %** — almost at the long-end floor `σ_inf`.
+- A clear **negative-slope smile** at short maturities: `K = 20` (≈ 33 % below
+  ATM) might show ~80 % vol while `K = 45` shows ~55 %. By `T = 2 y` the
+  smile has flattened to a band of a few vol points.
+
+If the broker shows you a 3M ATM quote of 55 %, scale `Δσ` so that
+`σ_inf + Δσ · exp(−κ · 0.25) ≈ 0.55` — with `σ_inf = 0.38` and `κ = 2`,
+that gives `Δσ ≈ (0.55 − 0.38) / exp(−0.5) ≈ 0.28`. Tweak the sliders and
+read the surface back to confirm.
+
+---
+
+## SECTION 5 — TTF/HH Spread Tab
+
+This tab prices a **Margrabe option** on the spread between **TTF** (Dutch
+gas, EUR/MWh) and **Henry Hub** (US gas, USD/MMBtu). It also lets you
+**back out the implied correlation** from a market price.
+
+### 5.1 What the TTF/HH spread option is
+
+A **spread option** pays the positive part of the difference between two
+forwards at expiry:
+
+- **Call** payoff:  `max(F_TTF_usd − F_HH, 0)`  — pays when TTF trades **above** HH.
+- **Put**  payoff:  `max(F_HH − F_TTF_usd, 0)`  — pays when HH trades **above** TTF.
+
+To make the two underlyings comparable, TTF (EUR/MWh) is converted to
+USD/MMBtu using:
+
+```
+F_TTF_usd = F_TTF_eur × 0.29307 / FX_EURUSD
+```
+
+(1 MMBtu = 0.29307 MWh; divide by the EUR/USD rate to convert EUR → USD.)
+
+The pricing model is **Margrabe** with both underlyings lognormal:
+
+```
+σ_spread = √(σ_TTF² + σ_HH² − 2·ρ·σ_TTF·σ_HH)
+```
+
+The spread vol — and therefore the option price — depends critically on the
+**correlation ρ** between TTF and HH returns:
+
+- `ρ → +1`  → TTF and HH move together → spread vol **falls** → option **cheap**.
+- `ρ → −1`  → TTF and HH diverge → spread vol **rises** → option **expensive**.
+
+#### Why it is useful
+
+- **LNG arbitrage**. A trader holding optionality on shipping LNG cargoes
+  from the US Gulf to NW Europe is naturally **long a TTF/HH call**: the
+  cargo is profitable when TTF − HH (net of shipping & regas) is large
+  positive. Pricing that optionality directly is what this tab does.
+- **Cross-basin risk management**. A European utility hedging gas supply
+  with US-linked contracts (or vice-versa) can value the embedded basis
+  optionality.
+- **Market-implied correlation**. Quoted prices on TTF/HH spread products
+  give a forward-looking, model-consistent view of how the two markets are
+  expected to co-move — different from realised historical correlation.
+
+### 5.2 Worked example — TTF=30 EUR/MWh, HH=3 USD/MMBtu, ρ=0.6
+
+Inputs:
+
+| Slider               | Value         |
+| -------------------- | ------------- |
+| Option type          | `call`        |
+| Forward TTF          | `30` EUR/MWh  |
+| Forward HH           | `3.00` USD/MMBtu |
+| Vol TTF (lognormal)  | `0.50` (50 %) |
+| Vol HH (lognormal)   | `0.45` (45 %) |
+| Correlation ρ        | `0.60`        |
+| Maturity T           | `0.50` years (≈ 6 months) |
+| FX EUR/USD           | `1.08`        |
+| Risk-free `r_usd`    | `0.04`        |
+
+Conversion: `F_TTF_usd = 30 × 0.29307 / 1.08 ≈ 8.14 USD/MMBtu`.
+
+Spread vol: `σ_spread = √(0.50² + 0.45² − 2·0.60·0.50·0.45) ≈ 0.45`.
+
+Expected output:
+
+- **Price ≈ 5.30 USD/MMBtu** (≈ 19.5 EUR/MWh after conversion back).
+- **delta_TTF ≈ +0.85** — a 1 USD/MMBtu rise in TTF gains ~0.85 USD/MMBtu.
+- **delta_HH  ≈ −0.85** — symmetric on the short leg.
+- **vega_ρ < 0** for the call: rising correlation **destroys value** because
+  spread vol falls.
+
+Move the **ρ slider** from `+0.99` down to `−0.99` and watch the price climb
+sharply: at ρ = −0.5 the same call is worth roughly twice as much because
+the spread vol is much higher.
+
+### 5.3 Using the implied-correlation solver
+
+Set the **`Prix marché` (USD/MMBtu)** input to a non-zero number — for
+example, the price your broker is showing for a TTF/HH spread call with
+exactly the same TTF, HH, vols, T and r as on the sliders. The dashboard
+then runs a Brent root-finder on `ρ` such that the Margrabe price matches
+the market price, and prints the result as **`Correlation implicite`**.
+
+How to use it:
+
+1. **Calibrate vols first** — `σ_TTF` and `σ_HH` should already match the
+   single-name market (use the Pricer tab to back out implied vols from the
+   outright option market).
+2. Enter the spread option **market mid** in `Prix marché`.
+3. Read the implied correlation. Typical TTF/HH implied correlations sit in
+   the **0.20–0.55** range; values outside that band usually mean a vol input
+   is off.
+4. Compare to **realised correlation** (e.g. 60 days of returns). A large
+   gap is a signal — either the market expects a regime change, or there is
+   a relative-value trade.
+
+Notes:
+- For a **call**, the price is **decreasing in ρ** (higher correlation →
+  cheaper option), so the solver is well-defined when `mkt > intrinsic`.
+- If the solver fails (`non solvable`), the market price is outside the
+  feasible range `[price(ρ=+1), price(ρ=−1)]` for your vol inputs — fix the
+  vols or check the price.
+
+---
+
+## SECTION 6 — Expiry Dates Tab
+
+This tab lists the next N TTF monthly contracts with their **option expiry**,
+**futures last trading day**, days-to-expiry and `T` in years (ACT/365).
+
+### 6.1 TFM (futures) vs TFO (options) — what is the difference?
+
+On ICE Endex the same delivery month has **two distinct expiry dates**:
+
+| Ticker stem | Product           | Expires on…                                                                                          |
+| ----------- | ----------------- | ---------------------------------------------------------------------------------------------------- |
+| **TFM**     | Monthly **future**| The **last business day of the month *before* delivery**. After this day the contract goes to delivery. |
+| **TFO**     | Monthly **option**| **5 business days before** the futures last trading day, walked back to a business day.              |
+
+Why the gap? After the option expires, in-the-money holders are assigned
+into the underlying future and they need a few business days to **manage
+their delivery hedge** before the future itself goes off the board. Five
+business days is the standard ICE Endex offset.
+
+Conventions used in the dashboard (`ttf_time.py` + `black76_ttf.py`):
+
+- **Holidays** — TARGET2 calendar (1 Jan, Good Friday, Easter Monday,
+  1 May, 25 Dec, 26 Dec).
+- **Day-count** — ACT/365 fixed for `T = (expiry − reference) / 365`.
+- **Business day** — Mon–Fri excluding TARGET2 holidays.
+
+### 6.2 Worked example — Jun-26, Jul-26, Aug-26
+
+Reference date: 29 April 2026.
+
+| Contract | Delivery month | Futures LTD (TFM) | Option expiry (TFO) | Days to option expiry | T (years, ACT/365) |
+| -------- | -------------- | ----------------- | ------------------- | --------------------- | ------------------ |
+| **TFMM26 / TFOM26** | Jun 2026 | Fri **29 May 2026**       | Fri **22 May 2026** | ≈ 24                  | ≈ 0.0658           |
+| **TFMN26 / TFON26** | Jul 2026 | Tue **30 Jun 2026**       | Tue **23 Jun 2026** | ≈ 56                  | ≈ 0.1534           |
+| **TFMQ26 / TFOQ26** | Aug 2026 | Fri **31 Jul 2026**       | Fri **24 Jul 2026** | ≈ 87                  | ≈ 0.2384           |
+
+How each row is built:
+
+1. **Futures LTD** — last business day of the month *before* delivery.
+   May 2026 ends on Sun 31 → roll back to Fri 29 May. June 2026 ends on
+   Tue 30 (business day, no roll). July 2026 ends on Fri 31.
+2. **Option expiry** — subtract 5 business days from the futures LTD,
+   skipping weekends and TARGET2 holidays.
+3. **Days to expiry** — calendar days from reference to option expiry.
+4. **T (years)** — `days / 365` (ACT/365).
+
+The exact dates for any reference are available directly from the
+dashboard — change the **Reference** date picker and the table re-renders
+for the next 24 contracts.
+
+> **ICE month codes** (used in tickers):
+> F=Jan, G=Feb, H=Mar, J=Apr, **K=May**, **M=Jun**, **N=Jul**, **Q=Aug**,
+> U=Sep, V=Oct, X=Nov, Z=Dec.
+
+---
+
+## SECTION 7 — Troubleshooting
+
+### 7.1 Common errors and how to fix them
+
+#### `ModuleNotFoundError: No module named 'black76_ttf'` (or `ttf_market_data`, `structures_ttf`, `ttf_hh_spread`, `ttf_time`)
+
+**Cause** — Python cannot find the project module on its path. Either the
+file is missing, or the notebook is being run from a different working
+directory.
+
+**Fix**
+
+1. In a terminal, verify the file is next to the notebook:
+   ```bash
+   ls dashboard_jupyter.ipynb black76_ttf.py ttf_market_data.py \
+      structures_ttf.py ttf_hh_spread.py ttf_time.py
+   ```
+2. If you opened the notebook from a different folder, restart the kernel
+   *from the project folder*:
+   ```bash
+   cd /path/to/Options_pricing
+   jupyter notebook dashboard_jupyter.ipynb
+   ```
+3. As a quick patch, prepend the project folder to `sys.path` in the first
+   cell:
+   ```python
+   import sys, os
+   sys.path.insert(0, os.path.abspath("."))
+   ```
+
+#### `ModuleNotFoundError: No module named 'ipywidgets'` (or numpy, scipy, pandas, matplotlib, plotly)
+
+**Cause** — a prerequisite is not installed in the kernel you are using.
+
+**Fix** — install into the **same** Python that runs the notebook:
+
+```bash
+pip install numpy scipy pandas matplotlib ipywidgets plotly
+```
+
+If you have several Python installs, run the install from inside the
+notebook to be sure you hit the right one:
+
+```python
+import sys
+!{sys.executable} -m pip install numpy scipy pandas matplotlib ipywidgets plotly
+```
+
+Then *Kernel → Restart*.
+
+#### Widgets don't display (sliders show as plain text or `Loading widget...`)
+
+**Cause** — the Jupyter widgets front-end is missing or out of sync with
+the `ipywidgets` Python package.
+
+**Fix**
+
+- **Classic Jupyter Notebook**:
+  ```bash
+  pip install --upgrade ipywidgets
+  jupyter nbextension enable --py widgetsnbextension
+  ```
+- **JupyterLab 3+**: `pip install --upgrade ipywidgets jupyterlab` then
+  restart Lab. The widgets manager ships built-in.
+- **JupyterLab 2**:
+  ```bash
+  jupyter labextension install @jupyter-widgets/jupyterlab-manager
+  ```
+- **VS Code**: install/update the **Jupyter** extension; in the notebook
+  select *…*  →  *Trust Notebook*; pick a kernel that has `ipywidgets`
+  installed (the bottom-right kernel picker shows the path).
+
+After any of the above, restart the kernel and re-run all cells.
+
+#### Sliders display but charts/output do not refresh
+
+**Cause** — the `_recompute` / `_refresh` callback raised an exception that
+was swallowed by `Output()`.
+
+**Fix** — open the cell's output area and look for a Python traceback. The
+most common offenders:
+
+- `T = 0` (division by zero): set maturity to a small positive value.
+- Vol set to 0: nudge the vol slider to e.g. `0.05`.
+- For the spread tab, `ρ = ±1` plus equal vols can produce `σ_spread = 0`
+  and the d1/d2 formula divides by zero — move ρ off the boundary.
+
+#### `ValueError` / `Brent solver did not converge` in the implied-correlation solver
+
+**Cause** — the entered market price is outside the feasible Margrabe band
+for your vol/T inputs (e.g. price below intrinsic, or above the ρ = −1
+ceiling).
+
+**Fix** — check you typed the price in **USD/MMBtu**, not EUR/MWh; verify
+the vol inputs match the single-name market; widen T if very short-dated.
+
+#### 3D vol surface plot is blank or distorted
+
+**Cause** — usually a stale matplotlib backend or a strike range that
+yields invalid log-moneyness near `T = 0`.
+
+**Fix**
+
+- Restart the kernel.
+- Keep `T_max ≥ 0.25` so that `m = ln(K/F)/√T` stays bounded.
+- In VS Code, set the matplotlib backend explicitly:
+  ```python
+  %matplotlib inline
+  ```
+
+#### Plotly charts (Streamlit dashboard) don't render in the browser
+
+**Cause** — outdated `plotly` or browser blocking JavaScript.
+
+**Fix** — `pip install --upgrade plotly`, hard-refresh the page
+(Ctrl/Cmd + Shift + R), and disable ad-blockers for `localhost`.
+
+#### Notebook says "Kernel died"
+
+**Cause** — usually an out-of-memory event caused by repeatedly rebuilding
+the vol surface on a very fine grid, or a circular widget callback.
+
+**Fix** — *Kernel → Restart & Clear Output*, then *Run All*. Reduce the
+strike range / `T_max` before regenerating the surface.
+
+#### `pip install` works but the new package is not visible in the notebook
+
+**Cause** — you installed into a different Python than the kernel.
+
+**Fix** — install from inside the notebook:
+
+```python
+import sys
+!{sys.executable} -m pip install <package>
+```
+
+Then *Kernel → Restart*.
