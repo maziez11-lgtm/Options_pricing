@@ -13,19 +13,24 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date, timedelta
-import re
 
 from scipy.optimize import brentq
 from scipy.stats import norm
 
 
 # ---------------------------------------------------------------------------
-# ICE TFO (Dutch TTF Natural Gas Options) — Official expiry calendar
+# ICE TTF Natural Gas — Official futures (TFM) and options (TFO) expiry rules
 # ---------------------------------------------------------------------------
-# ICE product code: TFO
+# ICE product codes:
+#   TFM  Dutch TTF Gas Futures
+#   TFO  Dutch TTF Gas Options (Futures-Style Margin)
 #
-# Definition (ICE TFO contract specification, verbatim):
+# TFM — futures expiry, verbatim:
+#   "Trading will cease at the close of business two UK Business Days
+#    prior to the first calendar day of the delivery month, quarter,
+#    season, or calendar."
 #
+# TFO — option expiry, verbatim:
 #   "Trading will cease when the intraday settlement price of the
 #    underlying futures contract is set, five calendar days before
 #    the start of the contract month. If that day is a non-business
@@ -118,11 +123,31 @@ def _prev_uk_bd(d: date) -> date:
     return d
 
 
-def _ttf_futures_ltd(contract_year: int, contract_month: int) -> date:
-    """ICE TTF futures last trading day = last UK business day of the month
-    immediately before the contract month."""
-    first_of_delivery = date(contract_year, contract_month, 1)
-    return _prev_uk_bd(first_of_delivery - timedelta(days=1))
+def ttf_futures_expiry_date(delivery_month: int, delivery_year: int) -> date:
+    """ICE TFM futures last trading day for the given delivery month / year.
+
+    Implements the ICE TFM rule verbatim:
+
+        Trading will cease at the close of business two UK Business Days
+        prior to the first calendar day of the delivery month, quarter,
+        season, or calendar.
+
+    Parameters
+    ----------
+    delivery_month : 1–12 (e.g. 6 for Jun)
+    delivery_year  : 4-digit year, e.g. 2026
+
+    Returns
+    -------
+    :class:`datetime.date` — the futures last trading day.
+    """
+    if not (1 <= delivery_month <= 12):
+        raise ValueError(f"delivery_month must be in 1..12, got {delivery_month}")
+
+    d = date(delivery_year, delivery_month, 1)
+    for _ in range(2):
+        d = _prev_uk_bd(d - timedelta(days=1))
+    return d
 
 
 def ttf_expiry_date(contract_month: int, contract_year: int) -> date:
@@ -150,10 +175,10 @@ def ttf_expiry_date(contract_month: int, contract_year: int) -> date:
     if not (1 <= contract_month <= 12):
         raise ValueError(f"contract_month must be in 1..12, got {contract_month}")
 
-    candidate = date(contract_year, contract_month, 1) - timedelta(days=5)
-    candidate = _prev_uk_bd(candidate)
-
-    if candidate == _ttf_futures_ltd(contract_year, contract_month):
+    candidate = _prev_uk_bd(
+        date(contract_year, contract_month, 1) - timedelta(days=5)
+    )
+    if candidate == ttf_futures_expiry_date(contract_month, contract_year):
         candidate = _prev_uk_bd(candidate - timedelta(days=1))
     return candidate
 
@@ -202,52 +227,6 @@ def ttf_next_expiries(
             month = 1
             year += 1
     return out
-
-
-# ---------------------------------------------------------------------------
-# Contract-name parser
-# ---------------------------------------------------------------------------
-
-_MONTH_FROM_CODE = {
-    "F": 1, "G": 2, "H": 3, "J": 4, "K": 5, "M": 6,
-    "N": 7, "Q": 8, "U": 9, "V": 10, "X": 11, "Z": 12,
-}
-_MONTH_FROM_ABBR = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-}
-_ICE_RE   = re.compile(r"^TTF([FGHJKMNQUVXZ])(\d{2})$", re.IGNORECASE)
-_ABBR_RE  = re.compile(r"^([A-Za-z]{3})-?(\d{2,4})$")
-
-
-def t_from_contract(contract: str, reference: date | None = None) -> float:
-    """Parse a contract name and return T to ICE TFO expiry (calendar / 365).
-
-    Accepted formats
-    ----------------
-    "TTFH26"   ICE code  (delivery month = March 2026)
-    "Mar26"    3-letter month + 2-digit year
-    "Mar2026"  3-letter month + 4-digit year
-    """
-    s = contract.strip()
-    m = _ICE_RE.match(s)
-    if m:
-        month = _MONTH_FROM_CODE[m.group(1).upper()]
-        year  = 2000 + int(m.group(2))
-        return ttf_time_to_expiry(month, year, reference)
-
-    m = _ABBR_RE.match(s)
-    if m:
-        month = _MONTH_FROM_ABBR.get(m.group(1).lower())
-        if month:
-            yr = int(m.group(2))
-            year = yr if yr > 100 else 2000 + yr
-            return ttf_time_to_expiry(month, year, reference)
-
-    raise ValueError(
-        f"Cannot parse contract '{contract}'. "
-        "Use ICE code ('TTFH26') or month abbreviation ('Mar26')."
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -305,51 +284,6 @@ def b76_price(
     if ot == "put":
         return b76_put(F, K, T, r, sigma)
     raise ValueError(f"option_type must be 'call' or 'put', got '{option_type}'")
-
-
-def b76_price_ttf(
-    F: float,
-    K: float,
-    contract: str,
-    r: float,
-    sigma: float,
-    option_type: str = "call",
-    reference: date | None = None,
-) -> float:
-    """Black-76 price where T is derived from a TTF contract name.
-
-    Parameters
-    ----------
-    contract : ICE code or month abbreviation, e.g. "TTFH26" or "Mar26"
-    reference : valuation date (default: today)
-
-    Example
-    -------
-    >>> b76_price_ttf(35.0, 35.0, "TTFM26", r=0.03, sigma=0.50)
-    >>> b76_price_ttf(35.0, 32.0, "Jun26",  r=0.03, sigma=0.45, option_type="put")
-    """
-    T = t_from_contract(contract, reference)
-    return b76_price(F, K, T, r, sigma, option_type)
-
-
-def bach_price_ttf(
-    F: float,
-    K: float,
-    contract: str,
-    r: float,
-    sigma_n: float,
-    option_type: str = "call",
-    reference: date | None = None,
-) -> float:
-    """Bachelier price where T is derived from a TTF contract name.
-
-    Parameters
-    ----------
-    contract : ICE code or month abbreviation, e.g. "TTFH26" or "Mar26"
-    reference : valuation date (default: today)
-    """
-    T = t_from_contract(contract, reference)
-    return bach_price(F, K, T, r, sigma_n, option_type)
 
 
 # ---------------------------------------------------------------------------
@@ -754,38 +688,33 @@ if __name__ == "__main__":
     print(f"  Call : {call2:.4f}")
     print(f"  IV (Brent): {iv2:.6f}  (input sigma_n={sigma_n})")
 
-    # ── ICE Endex official expiry calendar ───────────────────────────────
+    # ── ICE TTF official expiry calendar (TFM futures + TFO options) ─────
     _MONTH_LABELS = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ]
 
-    print("\n=== ICE Endex Dutch TTF — Official Expiry Calendar ===")
+    print("\n=== ICE Dutch TTF — Official Expiry Calendar (TFM / TFO) ===")
     for yr in (2025, 2026):
         print(f"\n  {yr}")
-        print(f"  {'Contract':<10}{'Delivery':<12}{'Candidate':<14}{'Expiry':<12}  Futures LTD")
-        print(f"  {'-' * 64}")
+        print(f"  {'Contract':<10}{'Futures LTD (TFM)':<22}{'Option Expiry (TFO)':<22}")
+        print(f"  {'-' * 54}")
         for m in range(1, 13):
+            fut = ttf_futures_expiry_date(m, yr)
             exp = ttf_expiry_date(m, yr)
-            fut = _ttf_futures_ltd(yr, m)
-            delivery = date(yr, m, 1)
-            candidate = _ttf_prev_bd(delivery - timedelta(days=5))
-            code = f"TTF{_MONTH_CODES_ICE[m-1]}{str(yr)[-2:]}"
-            holiday_flag = " *" if candidate != (delivery - timedelta(days=5)) else "  "
+            code = f"TTF{_MONTH_CODES_ICE[m - 1]}{str(yr)[-2:]}"
             print(
-                f"  {code:<10}{_MONTH_LABELS[m-1]}-{str(yr)[-2:]:<8}"
-                f"{str(candidate):<12}{holiday_flag}{str(exp):<12}  {fut}"
+                f"  {code:<10}"
+                f"{fut.strftime('%a %d %b %Y'):<22}"
+                f"{exp.strftime('%a %d %b %Y'):<22}"
             )
-        print("  (* = candidate adjusted back due to weekend/holiday)")
 
     # Next 6 expiries from a reference date
     ref = date(2026, 4, 23)
-    print(f"\n  Next 6 expiries (reference = {ref}):")
+    print(f"\n  Next 6 TFO expiries (reference = {ref}):")
     for code, exp in ttf_next_expiries(6, reference=ref):
-        T_opt = ttf_time_to_expiry(
-            int({_MONTH_CODES_ICE[i]: i + 1 for i in range(12)}[code[3]]),
-            2000 + int(code[-2:]),
-            reference=ref,
-        )
-        days = (exp - ref).days + 1
+        month = _MONTH_CODES_ICE.index(code[3]) + 1
+        year = 2000 + int(code[-2:])
+        T_opt = ttf_time_to_expiry(month, year, reference=ref)
+        days = (exp - ref).days
         print(f"    {code}  expiry={exp}  T={T_opt:.4f} y  ({days} cal days)")
