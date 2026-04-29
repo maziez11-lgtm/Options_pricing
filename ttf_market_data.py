@@ -39,6 +39,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from black76_ttf import (  # noqa: E402
+    ttf_futures_expiry_date,
     ttf_expiry_date,
     ttf_time_to_expiry,
     ttf_is_business_day,
@@ -83,25 +84,21 @@ class TTFContract:
 
 
 class TTFExpiryCalendar:
-    """TTF option and futures expiry dates following the official ICE TFO rule.
+    """TTF option and futures expiry dates following the official ICE rules.
 
-    Options expiry follows the ICE TFO contract specification (product code
-    TFO), implemented in :func:`black76_ttf.ttf_expiry_date`.  Source:
-    https://www.ice.com/products/71085679/Dutch-TTF-Natural-Gas-Options-Futures-Style-Margin
+    Futures expiry follows the ICE TFM rule (product code TFM), implemented
+    in :func:`black76_ttf.ttf_futures_expiry_date`.
 
-    Futures last trading day = last UK business day of the month immediately
-    before the contract month.
+    Options expiry follows the ICE TFO rule (product code TFO), implemented
+    in :func:`black76_ttf.ttf_expiry_date`.
     """
 
     def __init__(self, reference_date: Optional[date] = None) -> None:
         self.reference_date = reference_date or date.today()
 
     def futures_expiry_date(self, delivery_year: int, delivery_month: int) -> date:
-        """TTF futures last trading day (last UK business day of the prior month)."""
-        d = date(delivery_year, delivery_month, 1) - timedelta(days=1)
-        while not ttf_is_business_day(d):
-            d -= timedelta(days=1)
-        return d
+        """ICE TFM futures last trading day — delegates to ``ttf_futures_expiry_date``."""
+        return ttf_futures_expiry_date(delivery_month, delivery_year)
 
     def expiry_date(self, delivery_year: int, delivery_month: int) -> date:
         """ICE TFO option expiry — delegates to ``ttf_expiry_date``."""

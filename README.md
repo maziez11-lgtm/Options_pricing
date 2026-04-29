@@ -10,7 +10,7 @@ This library implements industry-standard models for energy derivatives:
 - **Bachelier** — normal-distribution model for low or negative price environments
 - **Monte Carlo** and **Binomial Tree** — for exotic/American options
 - **SABR calibration** — fits the implied vol smile from market data
-- ICE TFO (TTF Options) expiry calendar — official rule, UK business-day calendar
+- ICE TFM (TTF Futures) and TFO (TTF Options) expiry calendars — official rules, UK business-day calendar
 
 ## Features
 
@@ -18,7 +18,7 @@ This library implements industry-standard models for energy derivatives:
 |--------|-----------------|
 | `black76_ttf.py` | Black-76 and Bachelier pricing, Greeks, implied vol, contract-code parsing |
 | `ttf_market_data.py` | Forward curve, vol surface construction, SABR calibration, JSON/CSV export |
-| `ttf_time.py` | Generic day-count helpers (Act/365, Act/360, Act/Act, Bus/252) — *not* the ICE TFO expiry calendar; use `black76_ttf.ttf_expiry_date` for that |
+| `ttf_time.py` | Generic day-count helpers (Act/365, Act/360, Act/Act, Bus/252) — *not* the ICE expiry calendars; use `black76_ttf.ttf_expiry_date` (TFO) or `black76_ttf.ttf_futures_expiry_date` (TFM) for those |
 | `pricing/` | Core model implementations: Black-Scholes, Black-76, Bachelier, binomial tree, Monte Carlo, implied vol solvers |
 | `dashboard/` | React + Vite frontend — interactive pricer, Greeks charts, 3D vol surface |
 
@@ -42,14 +42,23 @@ pip install -r requirements.txt
 ## Quick Start
 
 ```python
-from black76_ttf import b76_call, b76_put, b76_greeks, b76_price_ttf
+from datetime import date
+from black76_ttf import (
+    b76_call, b76_put, b76_greeks,
+    ttf_futures_expiry_date, ttf_expiry_date, ttf_time_to_expiry,
+)
 
 # Price a Jun-26 ATM call
 call = b76_call(F=35.0, K=35.0, T=0.25, r=0.03, sigma=0.50)
 print(f"Call: {call:.2f} EUR/MWh")   # → 3.43 EUR/MWh
 
-# Price by contract code — T is calculated automatically from the ICE expiry calendar
-price = b76_price_ttf(F=35.0, K=35.0, contract="Jun26", r=0.03, sigma=0.50)
+# Compute T from the official ICE TFO calendar
+T = ttf_time_to_expiry(6, 2026, reference=date(2026, 4, 23))
+price = b76_call(F=35.0, K=35.0, T=T, r=0.03, sigma=0.50)
+
+# Underlying TFM futures last trading day for the same contract month
+ttf_futures_expiry_date(6, 2026)   # date(2026, 5, 28)  — Thu, 2 UK BDs before Jun 1
+ttf_expiry_date(6, 2026)           # date(2026, 5, 27)  — Wed (TFO)
 
 # Greeks
 g = b76_greeks(F=35.0, K=35.0, T=0.25, r=0.03, sigma=0.50, option_type="call")
@@ -65,8 +74,6 @@ fc = load_ttf_forward_curve(
 # Or fc = load_ttf_forward_curve()  # uses the bundled Jun-26→Dec-27 sample
 ```
 
-Accepted contract formats: `"TTFM26"`, `"Jun26"`, `"Jun2026"`.
-
 See **Manual Forward Curve & Vol Surface** below for the full forward-curve
 loader and the delta-quoted vol-surface helpers.
 
@@ -78,13 +85,12 @@ The primary entry point for most use cases.
 
 ```python
 from black76_ttf import (
-    b76_call, b76_put, b76_price,       # Black-76 pricing
-    b76_greeks, b76_implied_vol,         # Greeks and implied vol
-    b76_price_ttf, bach_price_ttf,       # Pricing by contract code
-    bach_call, bach_put, bach_greeks,    # Bachelier (normal vol)
-    ttf_expiry_date, ttf_time_to_expiry, # ICE TFO expiry calendar
-    ttf_is_business_day, ttf_next_expiries,
-    t_from_contract,                     # Contract-name → T (calendar/365)
+    b76_call, b76_put, b76_price,            # Black-76 pricing
+    b76_greeks, b76_implied_vol,             # Greeks and implied vol
+    bach_call, bach_put, bach_greeks,        # Bachelier (normal vol)
+    ttf_futures_expiry_date,                 # ICE TFM futures expiry
+    ttf_expiry_date, ttf_time_to_expiry,     # ICE TFO option expiry
+    ttf_is_business_day, ttf_next_expiries,  # UK calendar / next expiries
 )
 ```
 
@@ -99,11 +105,10 @@ sync with the rest of the project.
 
 ```python
 from datetime import date
-from ttf_market_data import TTFExpiryCalendar, VolatilitySurfaceBuilder, MarketCalibration
+from black76_ttf import ttf_futures_expiry_date, ttf_expiry_date
 
-calendar = TTFExpiryCalendar(reference_date=date(2026, 4, 20))
-calendar.expiry_date(2026, 6)            # date(2026, 5, 27)  — ICE TFO
-calendar.futures_expiry_date(2026, 6)    # date(2026, 5, 29)  — last UK BD
+ttf_futures_expiry_date(6, 2026)   # date(2026, 5, 28)  — TFM (Thu)
+ttf_expiry_date(6, 2026)           # date(2026, 5, 27)  — TFO (Wed)
 ```
 
 ### `pricing/` — Core Models
@@ -315,8 +320,16 @@ See **[user_manual.md](user_manual.md)** for:
 
 ## Expiry Calendar
 
-TTF options follow the official **ICE TFO** (TTF Options) contract rule.
-ICE product code: **TFO**.
+TTF futures and options follow the official ICE contract rules — product
+codes **TFM** (futures) and **TFO** (options).
+
+**TFM — futures expiry (verbatim):**
+
+> *Trading will cease at the close of business two UK Business Days prior
+> to the first calendar day of the delivery month, quarter, season, or
+> calendar.*
+
+**TFO — option expiry (verbatim):**
 
 > *Trading will cease when the intraday settlement price of the underlying
 > futures contract is set, five calendar days before the start of the
@@ -325,31 +338,36 @@ ICE product code: **TFO**.
 > is also the expiry date of the underlying futures contract, in which case
 > expiry will occur on the preceding business day.*
 
-The implementation uses a **UK business-day calendar** (England & Wales
-public holidays only — New Year, Good Friday, Easter Monday, the early-May,
+Both rules use a **UK business-day calendar** (England & Wales public
+holidays only — New Year, Good Friday, Easter Monday, the early-May,
 spring and summer bank holidays, Christmas Day, Boxing Day, with the
 standard substitution to the next weekday when a fixed-date holiday falls
 on a weekend).
 
 Computed expiries for monthly contracts in 2026:
 
-| Contract | Futures LTD | Option Expiry | Day |
-|----------|-------------|---------------|-----|
-| Jan-26 | 31 Dec 2025 | 24 Dec 2025 | Wed |
-| Feb-26 | 30 Jan 2026 | 27 Jan 2026 | Tue |
-| Mar-26 | 27 Feb 2026 | 24 Feb 2026 | Tue |
-| Apr-26 | 31 Mar 2026 | 27 Mar 2026 | Fri |
-| May-26 | 30 Apr 2026 | 24 Apr 2026 | Fri |
-| Jun-26 | 29 May 2026 | 27 May 2026 | Wed |
-| Jul-26 | 30 Jun 2026 | 26 Jun 2026 | Fri |
-| Aug-26 | 31 Jul 2026 | 27 Jul 2026 | Mon |
-| Sep-26 | 28 Aug 2026 | 27 Aug 2026 | Thu |
-| Oct-26 | 30 Sep 2026 | 25 Sep 2026 | Fri |
-| Nov-26 | 30 Oct 2026 | 27 Oct 2026 | Tue |
-| Dec-26 | 30 Nov 2026 | 26 Nov 2026 | Thu |
+| Contract | Futures LTD (TFM) | Day | Option Expiry (TFO) | Day |
+|----------|-------------------|-----|---------------------|-----|
+| Jan-26 | 30 Dec 2025 | Tue | 24 Dec 2025 | Wed |
+| Feb-26 | 29 Jan 2026 | Thu | 27 Jan 2026 | Tue |
+| Mar-26 | 26 Feb 2026 | Thu | 24 Feb 2026 | Tue |
+| Apr-26 | 30 Mar 2026 | Mon | 27 Mar 2026 | Fri |
+| May-26 | 29 Apr 2026 | Wed | 24 Apr 2026 | Fri |
+| Jun-26 | 28 May 2026 | Thu | 27 May 2026 | Wed |
+| Jul-26 | 29 Jun 2026 | Mon | 26 Jun 2026 | Fri |
+| Aug-26 | 30 Jul 2026 | Thu | 27 Jul 2026 | Mon |
+| Sep-26 | 27 Aug 2026 | Thu | 26 Aug 2026 | Wed |
+| Oct-26 | 29 Sep 2026 | Tue | 25 Sep 2026 | Fri |
+| Nov-26 | 29 Oct 2026 | Thu | 27 Oct 2026 | Tue |
+| Dec-26 | 27 Nov 2026 | Fri | 26 Nov 2026 | Thu |
 
-`ttf_expiry_date()`, `ttf_time_to_expiry()`, `ttf_next_expiries()`,
-`t_from_contract()` and `b76_price_ttf()` all use this calendar.
+The public expiry-date API in `black76_ttf` is:
+
+- `ttf_futures_expiry_date(delivery_month, delivery_year)` — TFM rule
+- `ttf_expiry_date(contract_month, contract_year)` — TFO rule
+- `ttf_time_to_expiry(contract_month, contract_year)` — calendar days / 365 to TFO
+- `ttf_is_business_day(date)` — UK business days only
+- `ttf_next_expiries(n=6)` — the next *n* TFO expiries
 
 ## Requirements
 
